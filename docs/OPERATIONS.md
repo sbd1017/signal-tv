@@ -570,6 +570,8 @@ messages stay yours. Code: `tvapp/family.py`; one copy of the code runs them all
 - **Sign-in**: the site's own passphrase page (no browser pop-up), then a 30-day session cookie for
   that address only. nginx sends `/NAME/` to the app's `/tv/`; the artwork sidecar answers
   `/NAME/next/` for signed-in devices (auth_request) and fetches that site's own logos.
+- **Remove one**: `iptv family remove NAME` (asks you to type its name): its service, nginx entry,
+  interface, provider settings, favourites/history and passphrase record go; nginx is tested first.
 - **Updates**: `deploy/install.sh` builds every family site's interface too; then restart them with
   the main app: `sudo systemctl restart signal-tv; /opt/signal-tv/deploy/family.sh restart`.
 - **Load**: each copy uses ~0.5-0.8 GB; video conversion is shared CPU (the main site gets priority,

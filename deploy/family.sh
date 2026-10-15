@@ -7,6 +7,9 @@
 #                             build; then it waits for a passphrase (Settings > Family sites on /tv,
 #                             or `iptv family NAME passphrase`) and a provider (`iptv family NAME set-xtream`)
 #   family.sh build [NAME…]   (re)build the new interface for each site (deploy/install.sh runs this)
+#   family.sh remove NAME     take /NAME down for good: its service, nginx snippet and method-map line
+#                             (nginx -t, restored if it fails), interface, settings (its provider file
+#                             too), favourites/history and passphrase record
 #   family.sh list            the sites, their service, provider and passphrase state
 #   family.sh restart         restart every family site's service (after a deploy)
 #
@@ -29,6 +32,9 @@ SITES_AVAILABLE=${TV_NGINX_SITES:-/etc/nginx/sites-available}
 UNITS=${TV_UNIT_DIR:-/etc/systemd/system}
 BACKUPS=${TV_BACKUP_DIR:-/var/backups}
 ENV_OWNER=${TV_ENV_OWNER-root:signal-tv}
+FSTATE=${TV_FAMILY_STATE:-/var/lib/signal-tv-family}
+FCACHE=${TV_FAMILY_CACHE:-/var/cache/signal-tv-family}
+OWNER_STATE=${TV_OWNER_STATE:-/var/lib/signal-tv}
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 RESERVED=" tv tv-test next new pwa static api m bets home media go convert pokemon admin login "
 OWNER_MAP='    "~^POST:/tv/api/family/[a-z0-9-]+/(passphrase|signout)$" 1;   # Signal TV: Settings > Family sites'
@@ -131,6 +137,34 @@ add() {
   echo "        set a passphrase  -> Settings > Family sites on /tv, or iptv family $name passphrase"
 }
 
+remove() {
+  local name=${1:-} stamp b snip
+  [[ "$name" =~ ^[a-z0-9][a-z0-9-]{1,29}$ ]] && [ -e "$FAM/$name.site" ] || { echo "no family site called ${name:-?} (family.sh list)"; exit 1; }
+  $SUDO "$SYSTEMCTL" disable --now "signal-tv-family@$name.service" >/dev/null 2>&1 || true
+  snip="$SNIPPETS/signal-tv-family-$name.conf"
+  stamp=$(date -u +%Y%m%dT%H%M%SZ); b=$BACKUPS/nginx-tv-family-$stamp
+  $SUDO install -d -m 0700 "$b"
+  $SUDO cp -a "$SITEMAP" "$b/"
+  [ ! -e "$snip" ] || $SUDO cp -a "$snip" "$b/"
+  $SUDO rm -f "$snip"
+  $SUDO python3 - "$SITEMAP" "$name" <<'PY'
+import sys
+path, name = sys.argv[1], sys.argv[2]
+lines = open(path).read().splitlines(keepends=True)
+open(path, "w").write("".join(l for l in lines if f'"~^POST:/{name}/(' not in l))
+PY
+  if ! $SUDO "$NGINX" -t 2>/dev/null; then
+    $SUDO cp -a "$b/$(basename "$SITEMAP")" "$SITEMAP"; [ ! -e "$b/$(basename "$snip")" ] || $SUDO cp -a "$b/$(basename "$snip")" "$snip"
+    $SUDO "$SYSTEMCTL" enable --now "signal-tv-family@$name.service" >/dev/null 2>&1 || true
+    echo "nginx -t failed: restored from $b, $name left running"; $SUDO "$NGINX" -t; exit 1
+  fi
+  $SUDO "$SYSTEMCTL" reload nginx
+  $SUDO rm -rf "$UIROOT/signal-tv-ui-$name" "$FSTATE/$name" "$FCACHE/$name"
+  $SUDO rm -f "$FAM/$name.site" "$FAM/$name.env" "$OWNER_STATE/family/$name.json"
+  $SUDO "$SYSTEMCTL" try-restart signal-tv-next.service || true      # the sidecar forgets /NAME/next/
+  echo "family site $name removed (nginx backup $b)"
+}
+
 list() {
   local any=0
   for n in $(names); do
@@ -147,8 +181,9 @@ restart() {
 cmd=${1:-list}; shift || true
 case "$cmd" in
   add) add "$@" ;;
+  remove) remove "$@" ;;
   build) build "$@" ;;
   list) list ;;
   restart) restart ;;
-  *) echo "usage: $0 add NAME | build [NAME…] | list | restart"; exit 2 ;;
+  *) echo "usage: $0 add NAME | remove NAME | build [NAME…] | list | restart"; exit 2 ;;
 esac

@@ -69,6 +69,7 @@ iptv - manage Signal TV (https://example.com/tv)
   iptv revoke-sessions     sign out every remembered browser/home-screen app
   iptv family              the family sites (other households' copies at example.com/<name>)
   iptv family add NAME     create example.com/NAME (its own service, provider, passphrase)
+  iptv family remove NAME  take it down for good (asks you to type its name)
   iptv family NAME passphrase | signout   set its passphrase (prompted) / sign every device out
   iptv family NAME status | set-xtream | set-playlist | use-demo | config | logs | restart …
                            any of the provider and service commands above, for that site
@@ -92,6 +93,10 @@ case "$cmd" in
     sub=${1:-list}; shift || true
     case "$sub" in
       list|add|build|restart) /opt/signal-tv/deploy/family.sh "$sub" "$@" ;;
+      remove)
+        read -r -p "Remove /${1:-?} for good, with its favourites, history and provider settings? Type its name to confirm: " ok
+        [ "$ok" = "${1:-}" ] || { echo "Not removed."; exit 1; }
+        /opt/signal-tv/deploy/family.sh remove "$1" ;;
       *)
         name=$sub; action=${1:-status}; shift || true
         [ -f "$FAMILY/$name.site" ] || { echo "no family site called $name (iptv family)"; exit 1; }

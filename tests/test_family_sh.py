@@ -15,14 +15,15 @@ class FamilySh(unittest.TestCase):
     def setUp(self):
         self.t = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.t)
-        for d in ("fam", "ui", "snippets", "sites", "units", "backups"):
+        for d in ("fam", "ui", "snippets", "sites", "units", "backups", "fstate", "fcache", "owner"):
             (self.t / d).mkdir()
         shutil.copy(ROOT / "deploy" / "signal-tv.conf", self.t / "snippets" / "signal-tv.conf")
         (self.t / "site.conf").write_text("map $request_method:$uri $allowed {\n" + MAP_LINE + "}\n")
         self.env = {**os.environ, "TV_FAMILY_DIR": str(self.t / "fam"), "TV_APP_DIR": str(ROOT), "TV_UI_ROOT": str(self.t / "ui"),
                     "TV_SUDO": "", "TV_NGINX_SNIPPETS": str(self.t / "snippets"), "TV_UI_SITEMAP": str(self.t / "site.conf"),
                     "TV_SYSTEMCTL": "true", "TV_NGINX": "true", "TV_NGINX_SITES": str(self.t / "sites"), "TV_UNIT_DIR": str(self.t / "units"),
-                    "TV_BACKUP_DIR": str(self.t / "backups"), "TV_ENV_OWNER": ""}
+                    "TV_BACKUP_DIR": str(self.t / "backups"), "TV_ENV_OWNER": "",
+                    "TV_FAMILY_STATE": str(self.t / "fstate"), "TV_FAMILY_CACHE": str(self.t / "fcache"), "TV_OWNER_STATE": str(self.t / "owner")}
 
     def run_sh(self, *args):
         return subprocess.run(["bash", str(SCRIPT), *args], env=self.env, capture_output=True, text=True)
@@ -53,6 +54,27 @@ class FamilySh(unittest.TestCase):
         out = self.run_sh("list").stdout
         self.assertIn("mumtv", out)
         self.assertIn("josephtv", out)
+
+    def test_remove(self):
+        self.assertEqual(self.run_sh("add", "mumtv").returncode, 0)
+        self.assertEqual(self.run_sh("add", "josephtv").returncode, 0)
+        for d in ("fstate", "fcache"):
+            (self.t / d / "josephtv").mkdir()
+        (self.t / "owner" / "family").mkdir()
+        (self.t / "owner" / "family" / "josephtv.json").write_text("{}")
+        r = self.run_sh("remove", "josephtv")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        gone = [self.t / "fam" / "josephtv.site", self.t / "fam" / "josephtv.env", self.t / "snippets" / "signal-tv-family-josephtv.conf",
+                self.t / "ui" / "signal-tv-ui-josephtv", self.t / "fstate" / "josephtv", self.t / "fcache" / "josephtv",
+                self.t / "owner" / "family" / "josephtv.json"]
+        self.assertEqual([str(p) for p in gone if p.exists()], [])
+        site = (self.t / "site.conf").read_text()
+        self.assertNotIn("/josephtv/", site)
+        self.assertIn("POST:/mumtv/", site, "the other site stays")
+        self.assertIn("POST:/tv/api/family/", site)
+        self.assertTrue((self.t / "snippets" / "signal-tv-family-mumtv.conf").exists())
+        self.assertNotIn("josephtv", self.run_sh("list").stdout)
+        self.assertNotEqual(self.run_sh("remove", "josephtv").returncode, 0, "gone already")
 
     def test_refusals(self):
         self.assertNotEqual(self.run_sh("add", "Mum TV").returncode, 0)
