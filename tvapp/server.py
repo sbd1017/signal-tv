@@ -463,6 +463,7 @@ async def status(request: Request):
     st = S.cat.status()
     st["jobs"] = S.engine.stats()
     st["app"] = __version__
+    st["tz"] = S.settings.timezone
     st["limits"] = {"live": S.settings.max_live, "vod": S.settings.max_vod}
     st["ui"] = {"new": bool(new_ui()), "default": ui_default(), "this": ui_for(request)}
     st["state"] = await asyncio.to_thread(S.state.summary)

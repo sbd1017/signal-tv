@@ -7,6 +7,7 @@ and again on SIGHUP (`iptv reload`), so changing a URL never needs a code edit.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,6 +66,20 @@ def write_env_value(key: str, value: str, path: Path = CONFIG_PATH) -> None:
     os.replace(tmp, path)
 
 
+def system_timezone() -> str:
+    """This machine's time zone as an IANA name ("Europe/London"); TV_TIMEZONE overrides it."""
+    tz = os.environ.get("TV_TIMEZONE", "").strip()
+    if not tz:
+        try:
+            tz = Path("/etc/timezone").read_text().strip()
+        except OSError:
+            try:
+                tz = os.readlink("/etc/localtime").split("zoneinfo/", 1)[1]
+            except (OSError, IndexError):
+                tz = ""
+    return tz if re.fullmatch(r"[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+){0,2}", tz) else ""
+
+
 def _num(env: dict, key: str, default: float) -> float:
     try:
         return float(env.get(key) or default)
@@ -96,6 +111,9 @@ class Settings:
     memory_limit_mb: int = 2048          # TV-only memory guard (tvapp/memguard.py)
     # the new interface, built for /tv (deploy/ui-switch.sh): <ui_dir>/new, and <ui_dir>/default -> new | classic
     ui_dir: Path = Path("/opt/signal-tv-ui")
+    # the guide's home time zone (IANA name): the new interface shows times in it unless a device
+    # chooses its own (a browser that reports UTC for privacy would show the guide an hour off)
+    timezone: str = ""
 
     @property
     def configured(self) -> bool:
@@ -130,4 +148,5 @@ def load() -> Settings:
         port=int(os.environ.get("TV_PORT", "8790")),
         public_origin=os.environ.get("TV_PUBLIC_ORIGIN", "https://example.com"),
         memory_limit_mb=int(_num(os.environ, "TV_MEMORY_LIMIT_MB", 2048)),
+        timezone=system_timezone(),
     )

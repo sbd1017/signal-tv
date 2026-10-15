@@ -208,8 +208,46 @@ export function fmtTime(sec) {
   return hh ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${mm}:${String(ss).padStart(2, '0')}`;
 }
 
+// ------------------------------------------------------------------ time zone
+// Every clock and date is shown in one zone: the Pi's (the guide's home, e.g. Europe/London, from
+// /status) unless this device chose its own in Settings. A browser that reports UTC for privacy (or
+// a VPN-matched zone) would otherwise put the whole guide an hour or more out.
+const TZ_KEY = 'tv.next.tz';                    // the Pi's zone, remembered so the first paint uses it
+const TZ_MODE = 'tv.next.timeMode';             // 'pi' (default) | 'device'
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode: this page only */ } };
+let piZone = lsGet(TZ_KEY) || '';
+let mode = lsGet(TZ_MODE) === 'device' ? 'device' : 'pi';
+let TZ;                                         // IANA name, or undefined: the device's own
+const validZone = (z) => { try { new Intl.DateTimeFormat('en', { timeZone: z }); return true; } catch { return false; } };
+const applyZone = () => { TZ = mode === 'pi' && piZone && validZone(piZone) ? piZone : undefined; };
+applyZone();
+export const timeMode = () => mode;
+export const piTimeZone = () => piZone;
+export const deviceTimeZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
+// the Pi said where it is; true when that changes what this page shows
+export function setPiTimeZone(z) {
+  if (!z || z === piZone || !validZone(z)) return false;
+  const before = TZ;
+  piZone = z;
+  lsSet(TZ_KEY, z);
+  applyZone();
+  return before !== TZ;
+}
+export function setTimeMode(m) { mode = m === 'device' ? 'device' : 'pi'; lsSet(TZ_MODE, mode); applyZone(); }
+// minutes east of UTC in the shown zone at `at` (ms): what the Pi needs to find "today"
+export function tzOffset(at = Date.now()) {
+  if (!TZ) return -new Date(at).getTimezoneOffset();
+  const p = {};
+  for (const x of new Intl.DateTimeFormat('en-US', { timeZone: TZ, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric' }).formatToParts(new Date(at))) p[x.type] = x.value;
+  return Math.round((Date.UTC(+p.year, p.month - 1, +p.day, +p.hour % 24, +p.minute) - Math.floor(at / 60000) * 60000) / 60000);
+}
+export const fmtDate = (ts, opts) => new Date(ts * 1000).toLocaleDateString([], { ...opts, timeZone: TZ });
+export const sameDay = (a, b) => fmtDate(a, { year: 'numeric', month: 'numeric', day: 'numeric' }) === fmtDate(b, { year: 'numeric', month: 'numeric', day: 'numeric' });
+
 export function fmtClock(ts) {
-  return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TZ });
 }
 
 export function fmtDuration(sec) {

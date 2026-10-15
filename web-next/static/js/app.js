@@ -2,7 +2,8 @@
 // inserted with textContent (never innerHTML). Shares the API, sync store and player logic
 // with the current interface (web/); only presentation and navigation differ.
 import { api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
-  chunked, toast, fmtClock, fmtDuration, fmtTime, img, imgv, setImg, NEXT } from './api.js?v=__V__';
+  chunked, toast, fmtClock, fmtDuration, fmtTime, img, imgv, setImg, NEXT, fmtDate, sameDay, tzOffset, timeMode, setTimeMode,
+  piTimeZone, deviceTimeZone, setPiTimeZone } from './api.js?v=__V__';
 import * as caps from './caps.js?v=__V__';
 import * as store from './store.js?v=__V__';
 import { Player } from './player.js?v=__V__';
@@ -320,9 +321,7 @@ function visibleFeeds(channels, list, pref = 'all') {
 function whenText(ts, now) {
   const mins = Math.round((ts - now) / 60);
   if (mins <= 60) return `in ${Math.max(1, mins)} min`;
-  const d = new Date(ts * 1000);
-  const sameDay = d.toDateString() === new Date(now * 1000).toDateString();
-  return sameDay ? fmtClock(ts) : `${d.toLocaleDateString([], { weekday: 'short' })} ${fmtClock(ts)}`;
+  return sameDay(ts, now) ? fmtClock(ts) : `${fmtDate(ts, { weekday: 'short' })} ${fmtClock(ts)}`;
 }
 
 function minsLeft(stop, now) {
@@ -786,7 +785,7 @@ function withFixture(ev) {
   if (!v) return ev;
   return v.replay ? { ...ev, replay: true, played: v.played } : { ...ev, replay: false, played: 0 };
 }
-const playedOn = (ts) => new Date(ts * 1000).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+const playedOn = (ts) => fmtDate(ts, { weekday: 'short', day: 'numeric', month: 'short' });
 const replayTag = (ev) => h('span', { class: 'sp-tag replay', text: ev.played ? `Replay · played ${playedOn(ev.played)}` : 'Replay' });
 
 // Artwork gaps: every generated crest / competition mark drawn because the Pi had no verified artwork
@@ -828,7 +827,7 @@ async function sportsData(day, force = false) {
   const hit = sportsCache.get(day);
   if (hit && !force && Date.now() - hit.at < 55000) return hit.d;
   const c = await caps.get(player.preferNative).catch(() => '');
-  const tzo = -new Date().getTimezoneOffset();
+  const tzo = tzOffset();
   const d = await api(`/sports?day=${day}&tzo=${tzo}&caps=${encodeURIComponent(c)}`, { timeout: 30000 });
   if (!d.pending) sportsCache.set(day, { at: Date.now(), d });
   return d;
@@ -843,7 +842,7 @@ async function forYouData(force = false) {
   if (hit && !force && Date.now() - hit.at < 55000) return hit.d;
   if (!favs.length) return { events: [], counts: {}, none: true };
   const c = await caps.get(player.preferNative).catch(() => '');
-  const tzo = -new Date().getTimezoneOffset();
+  const tzo = tzOffset();
   const d = await api(`/sports?view=foryou&fav=${encodeURIComponent(favs.join(','))}&tzo=${tzo}&caps=${encodeURIComponent(c)}`,
     { timeout: 30000 });
   if (!d.pending) sportsCache.set(key, { at: Date.now(), d });
@@ -975,9 +974,8 @@ async function viewSports() {
       chips.append(b);
     }
     days.hidden = pick.sport === 'foryou';         // For You covers today and tomorrow
-    const d = new Date();
-    if (pick.day === 'tomorrow') d.setDate(d.getDate() + 1);
-    dateLine.textContent = pick.sport === 'foryou' ? 'Today and tomorrow' : d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
+    const day = Date.now() / 1000 + (pick.day === 'tomorrow' ? 86400 : 0);
+    dateLine.textContent = pick.sport === 'foryou' ? 'Today and tomorrow' : fmtDate(day, { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
   function paint() {
@@ -1514,7 +1512,7 @@ const heroLS = {
   set(kind, v) { try { localStorage.setItem(HERO_KEY + kind, JSON.stringify(v)); } catch { /* private mode: just no memory */ } },
 };
 const HERO_FIELDS = ['name', 'year', 'dur', 'rating', 'genre', 'plot', 'backdrop', 'img'];
-const heroWindow = () => hero.windowOf(Date.now(), new Date().getTimezoneOffset());
+const heroWindow = () => hero.windowOf(Date.now(), -tzOffset());
 
 function savedHero(kind) {
   const s = heroLS.get(kind);
@@ -2291,18 +2289,49 @@ function viewLibrary() {
 function viewSettings() {
   const tracksBox = h('section', { class: 'panel', id: 'lib-tracks' });
   const uiBox = h('section', { class: 'panel', id: 'lib-interface' });
+  const timeBox = h('section', { class: 'panel', id: 'lib-time' });
   const backupBox = h('section', { class: 'panel', id: 'lib-backup' });
   const statusBox = h('section', { class: 'panel', id: 'lib-status' });
   const artBox = h('section', { class: 'panel', id: 'lib-artwork' });
   view.replaceChildren(head('Settings', 'Languages and sync are shared by all your devices'),
-    h('div', { class: 'settings' }, tracksBox, uiBox, backupBox, statusBox),
+    h('div', { class: 'settings' }, tracksBox, uiBox, timeBox, backupBox, statusBox),
     h('div', { class: 'settings-group' }, h('h2', { class: 'section-title', text: 'Diagnostics' }),
       h('div', { class: 'settings' }, artBox)));
   renderTrackPrefs(tracksBox);
   renderInterface(uiBox);
+  renderTimes(timeBox);
   renderBackup(backupBox);
   renderStatus(statusBox);
   renderArtwork(artBox);
+}
+
+// Times: the Pi's zone (the guide's home) or this device's own. Per device: a laptop abroad can show
+// local times while the TV at home keeps the Pi's.
+const zoneName = (z) => (z ? (z.split('/').pop() || z).replace(/_/g, ' ') : '');
+function renderTimes(box) {
+  const pi = piTimeZone();
+  const dev = deviceTimeZone();
+  const now = Date.now() / 1000;
+  const sample = (m) => {
+    const was = timeMode();
+    setTimeMode(m);
+    const t = fmtClock(now);
+    setTimeMode(was);
+    return t;
+  };
+  const opts = [['pi', pi ? `${zoneName(pi)} time (the Pi's)` : 'The Pi’s time'], ['device', `This device’s${dev ? ` (${zoneName(dev)})` : ''}`]];
+  const note = h('p', { class: 'muted small' });
+  const paintNote = () => {
+    const same = sample('pi') === sample('device');
+    note.textContent = `Guide times, kick-offs and dates use this. Right now: ${sample('pi')} ${pi ? zoneName(pi) : 'on the Pi'}`
+      + (same ? ', the same here.' : `, ${sample('device')} by this device’s clock${dev === 'UTC' || dev === 'Etc/UTC' ? ' (it reports UTC: privacy settings or a VPN often do that)' : ''}.`)
+      + ' Only this device changes.';
+  };
+  paintNote();
+  box.replaceChildren(h('h2', { text: 'Times' }),
+    h('label', { class: 'pref-row' }, h('span', { text: 'Show times in' }),
+      selectEl('Show times in', opts, timeMode(), (v) => { setTimeMode(v); sportsCache.clear(); paintNote(); toast('Saved on this device'); })),
+    note);
 }
 
 // Synced preferences (every device follows them); the player's CC / audio menus override them
@@ -2378,6 +2407,7 @@ function renderBackup(box) {
 
 async function loadStatus() {
   try { state.status = await api('/status', { timeout: 10000 }); } catch { /* offline */ }
+  if (state.status && setPiTimeZone(state.status.tz)) { sportsCache.clear(); render(true); }
   renderNet();
   return state.status;
 }

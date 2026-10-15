@@ -66,3 +66,25 @@ test('searchGuide asks the server once per query and device for a minute, never 
     globalThis.fetch = realFetch;
   }
 });
+
+test('times: shown in the Pi\'s zone (not whatever the browser reports), unless this device chose its own', async () => {
+  const api = await import('../web-next/static/js/api.js');
+  const at = Date.UTC(2026, 9, 15, 16, 0) / 1000;              // 16:00 UTC, Thu 15 Oct 2026
+  const clock = (h, m = 0) => new Date(Date.UTC(2026, 0, 1, h, m)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  assert.equal(api.setPiTimeZone('Europe/London'), true);
+  assert.equal(api.fmtClock(at), clock(17), 'British Summer Time');
+  assert.equal(api.tzOffset(at * 1000), 60);
+  assert.equal(api.tzOffset(Date.UTC(2026, 11, 1, 12)), 0, 'winter: GMT');
+  assert.equal(api.tzOffset(Date.UTC(2026, 9, 25, 0, 30)), 60, 'just before the clocks go back (01:00 UTC, 25 Oct)');
+  assert.equal(api.tzOffset(Date.UTC(2026, 9, 25, 1, 30)), 0, 'just after');
+  assert.ok(api.sameDay(Date.UTC(2026, 9, 15, 22, 30) / 1000, at), '23:30 in London is still Thursday');
+  assert.ok(!api.sameDay(Date.UTC(2026, 9, 15, 23, 30) / 1000, at), '00:30 in London is Friday');
+  api.setPiTimeZone('Asia/Tokyo');
+  assert.equal(api.tzOffset(at * 1000), 540);
+  assert.equal(api.fmtClock(at), clock(1));
+  assert.equal(api.setPiTimeZone('Not/AZone'), false, 'an unknown zone is ignored');
+  api.setTimeMode('device');
+  assert.equal(api.tzOffset(at * 1000), -new Date(at * 1000).getTimezoneOffset(), 'the device\'s own');
+  api.setTimeMode('pi');
+  assert.equal(api.fmtClock(at), clock(1));
+});
