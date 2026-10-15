@@ -295,7 +295,7 @@ class GreekSides(unittest.TestCase):
     def test_greek_names(self):
         for side, key in (("Ρεάλ Μαδρίτης", "team:real-madrid"), ("Κολωνία", "team:1-fc-koln"), ("Αμβούργο", "team:hamburger-sv"),
                           ("Βέρντερ Βρέμης", "team:werder-bremen"), ("Ισπανία", "team:spain"), ("Ομόνοια", "team:omonia-nicosia"),
-                          ("Βιλερμπάν", "team:asvel")):
+                          ("Βιλερμπάν", "team:asvel"), ("Ντένβερ Μπρόνκος", "team:denver-broncos")):
             self.assertEqual(sports.resolve_side(side)[1], key, side)
 
     def test_by_sound(self):
@@ -306,7 +306,7 @@ class GreekSides(unittest.TestCase):
             self.assertEqual(sports.greek_side(sports.norm(side).split()), sports.BY_ID_KEY[key].id, side)
 
     def test_no_guessing(self):
-        for side in ("Στιγμιότυπα", "Ρεάλ", "Ντένβερ Μπρόνκος", "Σιάτλ Σίχοκς", "Ουλμ"):    # highlights, too short, NFL
+        for side in ("Στιγμιότυπα", "Ρεάλ", "Ουλμ"):                       # "highlights", too short, unknown
             self.assertEqual(sports.resolve_side(side)[0], -1, side)
 
     def test_new_spellings(self):
@@ -322,7 +322,24 @@ class GreekSides(unittest.TestCase):
         info = sports.classify("Basketball: Φενέρμπαχτσε vs Παρτίζαν", "", b)
         self.assertEqual(info.key, sports.classify("EuroLeague: Fenerbahce vs Partizan", "", b).key, "one card")
         self.assertEqual([sports.ENTITIES[t].key for t in info.teams], ["team:fenerbahce", "team:partizan"])
-        self.assertEqual(sports.classify("NBA: Spurs vs Lakers", "", b).teams, (-1, -1), "Spurs are not Tottenham")
+        self.assertNotEqual(sports.classify("Basketball: Spurs vs Arsenal", "", b).teams[1:], (sports.BY_ID_KEY["team:arsenal"].id,),
+                            "Arsenal is not in basketball")
+
+    def test_us_leagues_by_city_and_nickname_only_in_their_sport(self):
+        """US guides name NBA/NFL teams by city or nickname ("Atlanta vs San Antonio", "A Falcons"). Those
+        names count only when the event is that sport: in football, "Spurs" is still Tottenham."""
+        key = lambda t, ch: [sports.ENTITIES[x].key if x >= 0 else None for x in sports.classify(t, "", ch).teams]
+        b, n, f = sports.BY_KEY["basketball"], sports.BY_KEY["nfl"], sports.BY_KEY["football"]
+        self.assertEqual(key("Atlanta vs San Antonio", b), ["team:atlanta-hawks", "team:san-antonio-spurs"])
+        self.assertEqual(key("NBA: Spurs vs Lakers", 0), ["team:san-antonio-spurs", "team:los-angeles-lakers"])
+        self.assertEqual(key("NFL: A Falcons vs C Bears", 0), ["team:atlanta-falcons", "team:chicago-bears"])
+        self.assertEqual(key("Jaguars vs Eagles", n), ["team:jacksonville-jaguars", "team:philadelphia-eagles"])
+        self.assertEqual(key("Spurs vs Arsenal", f), ["team:tottenham-hotspur", "team:arsenal"])
+        self.assertEqual(key("Wolves vs Arsenal", f), ["team:wolverhampton-wanderers", "team:arsenal"])
+        self.assertIsNone(sports.classify("Atlanta vs Houston", "", 0), "no sport, no guess")
+        wnba = sports.classify("Golden State vs Las Vegas - Semi Final - Game 3 - Women's National Basketball", "", b)
+        self.assertEqual(wnba.teams, (-1, -1), "a WNBA 'Golden State' is not the Warriors")
+        self.assertEqual([sports.ENTITIES[e].key for _, _, e in sports.query_groups(["spurs"])], ["team:tottenham-hotspur"])
 
 
 if __name__ == "__main__":

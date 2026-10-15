@@ -336,6 +336,70 @@ team:hapoel-tel-aviv = Hapoel Tel Aviv | Hapoel IBI Tel Aviv ; also: football
 team:manresa = BAXI Manresa | Bàsquet Manresa | Manresa | Μανρέσα
 team:derthona = Bertram Derthona | Derthona Tortona | Derthona Basket | Ντερτόνα
 team:buducnost = Budućnost | Buducnost | KK Budućnost | Budućnost VOLI
+team:atlanta-hawks = Atlanta Hawks ; scoped: Hawks | Atlanta
+team:boston-celtics = Boston Celtics ; scoped: Celtics | Boston
+team:brooklyn-nets = Brooklyn Nets ; scoped: Nets | Brooklyn
+team:charlotte-hornets = Charlotte Hornets ; scoped: Hornets | Charlotte
+team:chicago-bulls = Chicago Bulls ; scoped: Bulls | Chicago
+team:cleveland-cavaliers = Cleveland Cavaliers ; scoped: Cavaliers | Cleveland | Cavs
+team:dallas-mavericks = Dallas Mavericks ; scoped: Mavericks | Dallas | Mavs
+team:denver-nuggets = Denver Nuggets ; scoped: Nuggets | Denver
+team:detroit-pistons = Detroit Pistons ; scoped: Pistons | Detroit
+team:golden-state-warriors = Golden State Warriors ; scoped: Warriors | Golden State | GS Warriors
+team:houston-rockets = Houston Rockets ; scoped: Rockets | Houston
+team:indiana-pacers = Indiana Pacers ; scoped: Pacers | Indiana
+team:la-clippers = LA Clippers | Los Angeles Clippers | L.A. Clippers ; scoped: Clippers
+team:los-angeles-lakers = Los Angeles Lakers | LA Lakers | L.A. Lakers ; scoped: Lakers
+team:memphis-grizzlies = Memphis Grizzlies ; scoped: Grizzlies | Memphis
+team:miami-heat = Miami Heat ; scoped: Heat | Miami
+team:milwaukee-bucks = Milwaukee Bucks ; scoped: Bucks | Milwaukee
+team:minnesota-timberwolves = Minnesota Timberwolves ; scoped: Timberwolves | Minnesota | Wolves
+team:new-orleans-pelicans = New Orleans Pelicans ; scoped: Pelicans | New Orleans
+team:new-york-knicks = New York Knicks ; scoped: Knicks | New York | NY Knicks
+team:oklahoma-city-thunder = Oklahoma City Thunder ; scoped: Thunder | Oklahoma City | Oklahoma | OKC
+team:orlando-magic = Orlando Magic ; scoped: Magic | Orlando
+team:philadelphia-76ers = Philadelphia 76ers | Philadelphia Sixers ; scoped: 76ers | Philadelphia | Sixers
+team:phoenix-suns = Phoenix Suns ; scoped: Suns | Phoenix
+team:portland-trail-blazers = Portland Trail Blazers ; scoped: Trail Blazers | Portland | Blazers
+team:sacramento-kings = Sacramento Kings ; scoped: Kings | Sacramento
+team:san-antonio-spurs = San Antonio Spurs ; scoped: Spurs | San Antonio
+team:toronto-raptors = Toronto Raptors ; scoped: Raptors | Toronto
+team:utah-jazz = Utah Jazz ; scoped: Jazz | Utah
+team:washington-wizards = Washington Wizards ; scoped: Wizards | Washington
+
+@club nfl
+team:arizona-cardinals = Arizona Cardinals ; scoped: Cardinals | Arizona
+team:atlanta-falcons = Atlanta Falcons ; scoped: Falcons | Atlanta
+team:baltimore-ravens = Baltimore Ravens ; scoped: Ravens | Baltimore
+team:buffalo-bills = Buffalo Bills ; scoped: Bills | Buffalo
+team:carolina-panthers = Carolina Panthers ; scoped: Panthers | Carolina
+team:chicago-bears = Chicago Bears ; scoped: Bears | Chicago
+team:cincinnati-bengals = Cincinnati Bengals ; scoped: Bengals | Cincinnati
+team:cleveland-browns = Cleveland Browns ; scoped: Browns | Cleveland
+team:dallas-cowboys = Dallas Cowboys ; scoped: Cowboys | Dallas
+team:denver-broncos = Denver Broncos ; scoped: Broncos | Denver
+team:detroit-lions = Detroit Lions ; scoped: Lions | Detroit
+team:green-bay-packers = Green Bay Packers ; scoped: Packers | Green Bay
+team:houston-texans = Houston Texans ; scoped: Texans | Houston
+team:indianapolis-colts = Indianapolis Colts ; scoped: Colts | Indianapolis
+team:jacksonville-jaguars = Jacksonville Jaguars ; scoped: Jaguars | Jacksonville
+team:kansas-city-chiefs = Kansas City Chiefs ; scoped: Chiefs | Kansas City
+team:las-vegas-raiders = Las Vegas Raiders ; scoped: Raiders | Las Vegas
+team:los-angeles-chargers = Los Angeles Chargers | LA Chargers ; scoped: Chargers
+team:los-angeles-rams = Los Angeles Rams | LA Rams ; scoped: Rams
+team:miami-dolphins = Miami Dolphins ; scoped: Dolphins | Miami
+team:minnesota-vikings = Minnesota Vikings ; scoped: Vikings | Minnesota
+team:new-england-patriots = New England Patriots ; scoped: Patriots | New England
+team:new-orleans-saints = New Orleans Saints ; scoped: Saints | New Orleans
+team:new-york-giants = New York Giants ; scoped: Giants
+team:new-york-jets = New York Jets ; scoped: Jets
+team:philadelphia-eagles = Philadelphia Eagles ; scoped: Eagles | Philadelphia
+team:pittsburgh-steelers = Pittsburgh Steelers ; scoped: Steelers | Pittsburgh
+team:san-francisco-49ers = San Francisco 49ers ; scoped: 49ers | San Francisco | Niners
+team:seattle-seahawks = Seattle Seahawks ; scoped: Seahawks | Seattle
+team:tampa-bay-buccaneers = Tampa Bay Buccaneers ; scoped: Buccaneers | Tampa Bay | Bucs
+team:tennessee-titans = Tennessee Titans ; scoped: Titans | Tennessee
+team:washington-commanders = Washington Commanders ; scoped: Commanders | Washington
 
 @national any
 team:england = England
@@ -597,12 +661,13 @@ def _phrases(text: str) -> list[str]:
 
 
 class Entity:
-    __slots__ = ("id", "key", "kind", "sport", "name", "names", "weak", "not_after", "not_before", "priority", "was", "also")
+    __slots__ = ("id", "key", "kind", "sport", "name", "names", "weak", "not_after", "not_before", "priority", "was", "also", "scoped")
 
     def __init__(self, eid: int, key: str, kind: str, sport: int, name: str):
         self.id, self.key, self.kind, self.sport, self.name = eid, key, kind, sport, name
         self.was: list[str] = []
         self.also: set[int] = set()            # other sports this club plays under the same name (EuroLeague clubs)
+        self.scoped: list[str] = []            # names that are this team only in its own sport ("Spurs", "Atlanta")
         self.names: list[str] = []
         self.weak: list[str] = []
         self.not_after: set[str] = set()
@@ -643,6 +708,14 @@ def _load(data: str) -> list[Entity]:
                 e.was = val.split()
             elif name == "also":
                 e.also = {BY_KEY[x] for x in val.split()}
+            elif name == "scoped":
+                # "Hawks | Atlanta": the nickname first. Also its city's initials + nickname, as US guides
+                # abbreviate ("A Falcons", "NY Giants", "KC Chiefs").
+                names = [n.strip() for n in val.split("|") if n.strip()]
+                nick = norm(names[0]) if names else ""
+                city = norm(e.name)[: -len(nick)].split() if nick and norm(e.name).endswith(nick) else []
+                extra = [f"{city[0][0]} {nick}", f"{''.join(w[0] for w in city)} {nick}"] if city else []
+                e.scoped = [n for n in dict.fromkeys([norm(n) for n in names] + extra) if n]
         out.append(e)
     return out
 
@@ -721,6 +794,11 @@ for _e in ENTITIES:
         STRONG.setdefault(_p, []).append(_e.id)
     for _p in _e.weak:
         WEAK.setdefault(_p, []).append(_e.id)
+# per sport: names that count only when the event is that sport (US leagues' cities and nicknames)
+SCOPED: dict[int, dict[str, list[int]]] = {}
+for _e in ENTITIES:
+    for _p in _e.scoped:
+        SCOPED.setdefault(_e.sport, {}).setdefault(_p, []).append(_e.id)
 MAXLEN = max(len(p.split()) for p in list(STRONG) + list(WEAK))
 _TERMS: dict[str, int] = {}
 for _s, _txt in TERMS.items():
@@ -885,8 +963,9 @@ def _greek_one(key: str) -> int:
     return next(iter(best)) if len(best) == 1 else -1
 
 
-def resolve_side(side: str) -> tuple[int, str, bool]:
-    """A match side -> (entity id or -1, key text, women). Weak names count here: a whole side."""
+def resolve_side(side: str, sport: int = 0) -> tuple[int, str, bool]:
+    """A match side -> (entity id or -1, key text, women). Weak names count here: a whole side.
+    sport: the event's, when known - then that sport's own names come first ("Spurs" in the NBA)."""
     words = norm(side).split()
     whole = STRONG.get(" ".join(words)) or WEAK.get(" ".join(words))
     # a team whose own name ends in a women's marker ("Cong An Ha Noi": "noi") keeps it
@@ -894,6 +973,11 @@ def resolve_side(side: str) -> tuple[int, str, bool]:
     while words and words[-1] in WOMEN_WORDS and not whole:
         words.pop()
     text = " ".join(words)
+    own = SCOPED.get(sport, {})
+    for cand in (text, " ".join(w for w in words if w not in GENERIC)):
+        ids = own.get(cand)
+        if ids and len(ids) == 1:
+            return ids[0], ENTITIES[ids[0]].key, women
     for cand in (text, " ".join(w for w in words if w not in GENERIC)):
         ids = STRONG.get(cand) or WEAK.get(cand)
         if ids and len(ids) == 1 and ENTITIES[ids[0]].kind in ("club", "national"):
@@ -1002,8 +1086,14 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
     sides: list[str] = []
     if pair:
         label, left, right, dashed = pair
-        a, ka, wa = resolve_side(left)
-        b, kb, wb = resolve_side(right)
+        # the sport as far as the title, its competition or the channel say, for sport-only names
+        hint = term or sport_word(norm(label).split()) or next((c.sport for c in comps if c.sport), 0) or \
+            (channel_sport if channel_sport != OTHER else 0)
+        # the sport-only names are the men's leagues' teams: a WNBA "Golden State" is not the Warriors
+        if any(c.key == "comp:wnba" for c in comps) or any(w in WOMEN_WORDS or w == "womens" for w in tw):
+            hint = 0
+        a, ka, wa = resolve_side(left, hint)
+        b, kb, wb = resolve_side(right, hint)
         lw = norm(label).split()
         if not comps and lw:
             comps = [ENTITIES[e] for _, _, e in scan(lw, weak=True) if ENTITIES[e].kind == "competition"]
