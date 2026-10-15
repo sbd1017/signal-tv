@@ -2,7 +2,7 @@
 // inserted with textContent (never innerHTML). Shares the API, sync store and player logic
 // with the current interface (web/); only presentation and navigation differ.
 import { api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
-  chunked, toast, fmtClock, fmtDuration, fmtTime, img, imgv, setImg, NEXT, fmtDate, sameDay, tzOffset, timeMode, setTimeMode,
+  chunked, toast, fmtClock, fmtDuration, fmtTime, img, imgv, setImg, NEXT, STATIC, fmtDate, sameDay, tzOffset, timeMode, setTimeMode,
   piTimeZone, deviceTimeZone, setPiTimeZone } from './api.js?v=__V__';
 import * as caps from './caps.js?v=__V__';
 import * as store from './store.js?v=__V__';
@@ -14,6 +14,7 @@ import * as lang from './lang.js?v=__V__';
 import * as hero from './hero.js?v=__V__';
 import * as shuffle from './shuffle.js?v=__V__';
 import * as art from './sportsart.js?v=__V__';
+import * as flags from './flags.js?v=__V__';
 import * as versions from './versions.js?v=__V__';
 
 const $ = (id) => document.getElementById(id);
@@ -1009,9 +1010,18 @@ async function viewSports() {
       out.push(emptyBox(`No ${what} in the guide ${pick.day === 'today' ? 'for the rest of today' : 'for tomorrow'}`,
         'Only channels with a programme guide are listed. Live search finds everything else by name.'));
     }
-    list.replaceChildren(...out);
-    const ids = evs.flatMap((e) => [e.comp_id, ...(e.sport === 'football' ? e.teams || [] : [])]);
-    const labels = evs.flatMap((e) => (e.sport === 'football' && names.teams(e.title)) || []);   // every side: exact per name
+    // more than one section: a row of jumps to each (with its count), so Replays at the bottom is one tap away
+    const blocks = out.filter((el) => el.classList.contains('sp-block'));
+    const jump = blocks.length > 1 ? h('nav', { class: 'sp-jump', 'aria-label': 'Jump to' }, ...blocks.map((b) => {
+      const t = b.querySelector('.section-title').textContent;
+      const btn = h('button', { class: 'chip small', type: 'button' }, t, h('span', { class: 'chip-n', text: b.querySelector('.sp-block-head .n').textContent }),
+        icon('chev-down', 'ico sm'));
+      btn.addEventListener('click', () => b.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }));
+      return btn;
+    })) : null;
+    list.replaceChildren(...(jump ? [jump] : []), ...out);
+    const ids = evs.flatMap((e) => [e.comp_id, ...(e.teams || [])]);
+    const labels = evs.flatMap((e) => names.teams(e.title) || []);   // every side: exact per name
     loadArt(ids, labels).then((found) => { if (found && state.section === 'sports') paint(); });
     loadFixtures(foryou ? mine.events : data.events).then(({ found, pending }) => {
       if (state.section !== 'sports') return;
@@ -1093,6 +1103,7 @@ async function viewSports() {
 
   // The two teams as shown, each with its crest: catalogue names decide which id is which, else order.
   function teamSides(ev) {
+    if (ev.kind && ev.kind !== 'match') return null;        // "F1: Sprint - GP Singapur" is one event, not two sides
     const pair = names.teams(ev.title);
     if (!pair) return null;
     const ids = (ev.teams || []).slice(0, 2);
@@ -1104,20 +1115,34 @@ async function viewSports() {
       return [t.name, ...(t.aka || [])].some((n) => { const k = fold(n); return k && (f.includes(k) || k.includes(f)); });
     };
     const sideIds = art.sides(pair, ids, pair.map((l) => nameIdx.get(l) || ''), matches);
-    return pair.map((label, i) => ({ label, id: sideIds[i], crest: art.crest(sideIds[i], label) }));
+    // national sides: the flag (by the label, or by the known team's own name for "Ισπανία"-style labels)
+    const fl = flags.pairFlags(pair.map((l, i) => (flags.flagCode(l) ? l : (known(sideIds[i]) || {}).name || l)));
+    return pair.map((label, i) => {
+      const t = known(sideIds[i]);
+      const flag = fl[i] || (t && t.national ? flags.flagCode(t.name) : '');   // a known national side on its own counts too
+      return { label, id: sideIds[i], crest: art.crest(sideIds[i], label), flag, national: !!(t && t.national) };
+    });
   }
 
-  // The club's real crest when the library has it (football: every canonical team is a football side),
-  // else the generated disc in its colours - also if the crest file fails to load.
+  // The club's real crest when the library has it, else the generated disc in its colours - also if
+  // the crest file fails to load. National sides: football keeps the federation's crest when there is
+  // one; every other sport shows the flag (England's cricket team is not the FA).
   // gap: {label, context, comp} - where a generated crest is drawn for want of artwork (noteGap)
-  function crestEl(c, id = '', big = false, sport = 'football', gap = null) {
+  function crestEl(c, id = '', big = false, sport = 'football', gap = null, flag = '') {
     const disc = () => {
       const el = h('span', { class: `crest ${c.known ? '' : 'plain'}`, 'aria-hidden': 'true', dataset: { i: c.initials } });
       el.style.setProperty('--a', c.a);
       el.style.setProperty('--b', c.b);
       return el;
     };
-    if (sport !== 'football') return disc();
+    if (flag && (sport !== 'football' || !hasArt(id))) {
+      const im = h('img', { src: `${STATIC}/flags/${flag}.svg`, alt: '', decoding: 'async' });
+      const el = h('span', { class: 'crest flag', 'aria-hidden': 'true' }, im);
+      im.addEventListener('error', () => el.replaceWith(disc()), { once: true });
+      return el;
+    }
+    // a national team's artwork is its football federation's: never on cricket, tennis…
+    if (sport !== 'football' && (!hasArt(id) || ((sportsCat && sportsCat.byId.get(id)) || {}).national)) return disc();
     if (!hasArt(id)) {
       if (gap && (id ? artNone(id) : nameIdx.has(gap.label) && !nameIdx.get(gap.label))) noteGap(id, gap.label, gap.context, gap.comp);
       return disc();
@@ -1188,7 +1213,7 @@ async function viewSports() {
     const top = h('div', { class: 'fx-top' }, h('span', { class: `live-pill ${ev.replay ? 'replay' : ''}`, text: ev.replay ? 'Replay' : 'Live' }),
       compLabel(ev, meta || SPORT_NAMES[ev.sport] || 'Sport', where), ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, star);
     const sides = teamSides(ev);
-    const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.id, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }), capsSpan(t.label))))
+    const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.id, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }, t.flag), capsSpan(t.label))))
       : h('div', { class: 'fx-title' }, capsSpan(ev.title));
     const mainBtn = h('button', { class: 'fx-main', type: 'button', 'aria-label': `Play ${ev.title} on ${best.ch.name}` }, title);
     mainBtn.addEventListener('click', () => playChannel(best.ch));
@@ -1224,8 +1249,8 @@ async function viewSports() {
     const sides = teamSides(ev);
     const title = h('span', { class: `dep-title ${isFavEvent(ids) ? 'is-fav' : ''}` });
     const gap = (t) => ({ label: t.label, context: 'sports:board', comp: ev.comp });
-    if (sides) title.append(crestEl(sides[0].crest, sides[0].id, false, ev.sport, gap(sides[0])), capsSpan(sides[0].label), h('span', { class: 'vs', text: 'v' }),
-      crestEl(sides[1].crest, sides[1].id, false, ev.sport, gap(sides[1])), capsSpan(sides[1].label));
+    if (sides) title.append(crestEl(sides[0].crest, sides[0].id, false, ev.sport, gap(sides[0]), sides[0].flag), capsSpan(sides[0].label), h('span', { class: 'vs', text: 'v' }),
+      crestEl(sides[1].crest, sides[1].id, false, ev.sport, gap(sides[1]), sides[1].flag), capsSpan(sides[1].label));
     else title.append(capsSpan(ev.title));
     const mainBtn = h('button', { class: 'dep-main', type: 'button', 'aria-label': `${ev.title}, ${fmtClock(ev.start)}, on ${best.ch.name}` },
       title, h('span', { class: 'dep-meta' }, hasArt(ev.comp_id) ? h('img', { class: 'comp-logo', src: artUrl(ev.comp_id, 64), alt: '', decoding: 'async' })
@@ -1403,11 +1428,11 @@ function vinfo(it) {                       // cached on the item: version tier, 
 function langItems(list, sort, pref) {
   if (pref === 'all') return sortedItems(list, sort);
   const k = `${sort}|${pref}`;
-  if (!list.sorted[k]) list.sorted[k] = lang.applyLangPref(sortedItems(list, sort), pref, vinfo);
+  if (!list.sorted[k]) list.sorted[k] = lang.rankByLanguage(lang.applyLangPref(sortedItems(list, sort), pref, vinfo), vinfo);
   return list.sorted[k];
 }
 const LANG_HELP = 'Language is read from the provider’s own labels (EN, DE, “dubbed”…), so it is a good guide, not a guarantee. '
-  + 'English first puts a title’s English version before its other versions; search relevance still comes first. '
+  + 'English first lists English titles first, then unlabelled ones, then other languages, each in the order you picked (in search, the best match still comes first). '
   + 'English only hides versions labelled as another language. Unlabelled titles always stay, so a few foreign ones can remain.';
 // the segmented control + a small "i" that says what the choice can and can't promise
 function langSeg(onchange) {

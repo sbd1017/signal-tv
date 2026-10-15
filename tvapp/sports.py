@@ -77,7 +77,7 @@ team:manchester-city = Manchester City | Man City ; weak: Man. City | ManCity
 team:manchester-united = Manchester United | Man United | Man Utd | Manchester Utd | Μάντσεστερ Γιουνάιτεντ ; weak: ManU | Man U
 team:newcastle-united = Newcastle United | Newcastle ; weak: Newcastle Utd
 team:nottingham-forest = Nottingham Forest | Nott'm Forest | Nottm Forest ; weak: Forest | N Forest
-team:sunderland = Sunderland
+team:sunderland = Sunderland | Sund'land
 team:tottenham-hotspur = Tottenham Hotspur | Tottenham | Spurs ; not after: san antonio
 team:west-ham-united = West Ham United | West Ham | Γουέστ Χαμ ; weak: West Ham Utd
 team:wolverhampton-wanderers = Wolverhampton Wanderers | Wolves
@@ -101,7 +101,7 @@ team:celtic = Celtic
 team:rangers = Rangers ; weak: Glasgow Rangers
 team:aberdeen = Aberdeen
 team:heart-of-midlothian = Heart of Midlothian | Hearts
-team:real-madrid = Real Madrid
+team:real-madrid = Real Madrid | Real Madryt
 team:barcelona = Barcelona | FC Barcelona | Barca | Μπαρτσελόνα ; weak: Barcelone | Barcelonne | Barca FC
 team:atletico-madrid = Atlético Madrid | Atletico de Madrid | Atleti | Ατλέτικο Μαδρίτης ; weak: Atletico | A Madrid | Atl Madrid | Atletico Madryt
 team:athletic-club = Athletic Club | Athletic Bilbao ; weak: Bilbao | Athletic
@@ -145,11 +145,11 @@ team:vfb-stuttgart = VfB Stuttgart ; weak: Stuttgart
 team:borussia-monchengladbach = Borussia Mönchengladbach | Monchengladbach | Gladbach ; weak: Γκλάντμπαχ
 team:vfl-wolfsburg = VfL Wolfsburg ; weak: Wolfsburg
 team:sc-freiburg = SC Freiburg ; weak: Freiburg
-team:werder-bremen = Werder Bremen ; weak: Bremen
+team:werder-bremen = Werder Bremen | SV Werder Brema | Werder Brema ; weak: Bremen
 team:union-berlin = Union Berlin | 1. FC Union Berlin
 team:hamburger-sv = Hamburger SV | Hamburg SV ; weak: Hamburg | HSV
 team:paris-saint-germain = Paris Saint-Germain | Paris St Germain | Paris St-Germain | Paris SG | PSG
-team:marseille = Marseille | Olympique de Marseille | Olympique Marsylia ; weak: OM
+team:marseille = Marseille | Olympique de Marseille | Olympique Marsylia | Olympique Marseille ; weak: OM
 team:lyon = Lyon | Olympique Lyonnais ; weak: OL
 team:as-monaco = AS Monaco ; weak: Monaco
 team:lille = Lille | LOSC Lille ; weak: LOSC | Λιλ
@@ -159,23 +159,23 @@ team:stade-rennais = Stade Rennais | Rennes
 team:benfica = Benfica | SL Benfica ; weak: SLB
 team:fc-porto = FC Porto ; weak: Porto | Πόρτο
 team:sporting-cp = Sporting CP | Sporting Lisbon | Sporting Clube de Portugal | Sporting Lissabon | Sporting Lisabona | Σπόρτινγκ Λισαβόνας ; weak: Sporting | SCP
-team:sc-braga = SC Braga ; weak: Braga
+team:sc-braga = SC Braga | Sporting Braga | Sporting de Braga ; weak: Braga
 team:ajax = Ajax | AFC Ajax | Ajax Amsterdam | AFC Ajax Amsterdam
 team:psv-eindhoven = PSV Eindhoven | PSV | PSV Αϊντχόφεν
 team:feyenoord = Feyenoord
 team:az-alkmaar = AZ Alkmaar ; weak: AZ
 team:galatasaray = Galatasaray | Γαλατασαράι
-team:fenerbahce = Fenerbahçe
+team:fenerbahce = Fenerbahçe | Fenerbahce Istanbul | Fenerbahçe Beko | Fenerbahce Beko
 team:besiktas = Beşiktaş | Besiktas JK | Besiktas AS
 team:trabzonspor = Trabzonspor
 team:club-brugge = Club Brugge | Club Brugge KV | Κλαμπ Μπριζ ; weak: Brugge | Club Brugges
 team:anderlecht = Anderlecht | RSC Anderlecht
-team:red-bull-salzburg = Red Bull Salzburg | RB Salzburg ; weak: Salzburg
+team:red-bull-salzburg = Red Bull Salzburg | RB Salzburg | Red Bull Saltzburg | Saltzburg ; weak: Salzburg
 team:shakhtar-donetsk = Shakhtar Donetsk ; weak: Shakhtar
 team:dinamo-zagreb = Dinamo Zagreb ; weak: GNK Dinamo
 team:red-star-belgrade = Red Star Belgrade | Crvena Zvezda
-team:olympiacos = Olympiacos | Olympiakos | Olympiakos SFP | Ολυμπιακός
-team:panathinaikos = Panathinaikos
+team:olympiacos = Olympiacos | Olympiakos | Olympiakos SFP | Ολυμπιακός | Olympiakos Piraeus | Olympiacos Piraeus | Olympiakos Pireus
+team:panathinaikos = Panathinaikos | Panathinaikos Athens | Panathinaikos OPAP Athens | Panathinaikos AKTOR Athens
 team:al-hilal = Al Hilal
 team:al-nassr = Al Nassr
 team:al-ittihad = Al Ittihad
@@ -192,7 +192,7 @@ team:club-america = Club America ; weak: America
 team:portsmouth = Portsmouth | Πόρτσμουθ
 team:motherwell = Motherwell
 team:elche = Elche | Elche CF
-team:deportivo-la-coruna = Deportivo La Coruña | Deportivo de La Coruña | RC Deportivo ; weak: Deportivo | Depor
+team:deportivo-la-coruna = Deportivo La Coruña | Deportivo de La Coruña | RC Deportivo | La Coruña | La Coruna ; weak: Deportivo | Depor
 team:malaga = Málaga CF | Malaga CF ; weak: Málaga | Malaga
 team:frosinone = Frosinone | Frosinone Calcio
 team:tsg-hoffenheim = TSG Hoffenheim | TSG 1899 Hoffenheim | 1899 Hoffenheim | Hoffenheim ; weak: TSG
@@ -202,6 +202,7 @@ team:1-fc-nurnberg = 1. FC Nürnberg | 1. FC Nurnberg | FC Nürnberg | Nürnberg
 team:hansa-rostock = Hansa Rostock | FC Hansa Rostock ; weak: Hansa
 team:1-fc-saarbrucken = 1. FC Saarbrücken | 1. FC Saarbrucken | FC Saarbrücken | FC Saarbrucken | Saarbrücken | Saarbrucken
 team:msv-duisburg = MSV Duisburg ; weak: Duisburg
+team:1-fc-koln = 1. FC Köln | 1. FC Koln | FC Köln | FC Koln | 1 FC Köln | 1 FC Koln | FC Cologne | Cologne ; weak: Köln | Koln
 team:fortuna-koln = Fortuna Köln | Fortuna Koln | SC Fortuna Köln | SC Fortuna Koln
 team:rot-weiss-essen = Rot-Weiss Essen | Rot-Weiß Essen ; weak: Rot-Weiss
 team:sv-meppen = SV Meppen ; weak: Meppen
@@ -273,6 +274,68 @@ team:melbourne-victory = Melbourne Victory
 team:east-bengal = East Bengal
 team:cong-an-ha-noi = Cong An Ha Noi | Công An Hà Nội | CAHN
 team:lion-city-sailors = Lion City Sailors
+
+team:lask = LASK | LASK Linz
+team:sturm-graz = SK Sturm Graz | Sturm Graz ; weak: Sturm
+team:union-saint-gilloise = Union Saint-Gilloise | Royale Union Saint-Gilloise | Union SG | St Gilloise | St Gilloisse | Ουνιόν Σεν-Ζιλουάζ
+team:torreense = SCU Torreense | Torreense | Torrense
+team:kups = KuPS | Kuopion Palloseura
+team:partizan = Partizan | Partizan Belgrade | Partizan Belgrad | FK Partizan | KK Partizan | Partizan Mozzart Bet Belgrade | Παρτίζαν
+team:omonia-nicosia = Omonia Nicosia | AC Omonia | Omonia | Ομόνοια
+team:pafos = Pafos FC | Pafos | Πάφος
+team:kauno-zalgiris = Kauno Žalgiris | Kauno Zalgiris | Κάουνο Ζαλγκίρις
+team:hajduk-split = Hajduk Split | HNK Hajduk Split | Χάιντουκ Σπλιτ ; weak: Hajduk
+team:fluminense = Fluminense
+team:levante = Levante | Levante UD
+team:universitatea-craiova = Universitatea Craiova | CS Universitatea Craiova | CS U Craiova | U Craiova
+team:cska-sofia = CSKA Sofia | PFC CSKA Sofia
+team:dinamo-bucuresti = Dinamo București | Dinamo Bucuresti | Dinamo Bucharest | Dínamo Bucareste | Dinamo Bucareste
+team:gornik-zabrze = Górnik Zabrze | Gornik Zabrze
+team:lugano = FC Lugano ; weak: Lugano
+team:shanghai-shenhua = Shanghai Shenhua
+team:gangwon = Gangwon FC ; weak: Gangwon
+team:adelaide-united = Adelaide United
+team:tampines-rovers = Tampines Rovers
+team:holstein-kiel = Holstein Kiel
+team:hertha-bsc = Hertha BSC | Hertha Berlin ; weak: Hertha
+team:estudiantes = Estudiantes de La Plata | Estudiantes LP ; weak: Estudiantes
+team:al-wasl = Al Wasl | Al-Wasl
+team:neftchi = Neftçi | Neftchi | PFC Neftchi | Neftchi Baku
+team:al-gharafa = Al Gharafa | Al-Gharafa
+team:esteghlal = Esteghlal | Esteghlal FC
+team:hapoel-beer-sheva = Hapoel Be'er Sheva | Hapoel Beer Sheva
+team:jablonec = FK Jablonec ; weak: Jablonec
+team:preussen-munster = Preußen Münster | Preussen Munster | SC Preußen Münster
+team:fortuna-dusseldorf = Fortuna Düsseldorf | Fortuna Dusseldorf
+team:lincoln-city = Lincoln City
+team:brann = SK Brann ; weak: Brann
+team:lincoln-red-imps = Lincoln Red Imps
+team:fc-kobenhavn = FC København | FC Kobenhavn | FC Copenhagen | København | Kobenhavn | Κοπεγχάγη ; weak: Copenhagen
+team:alaves = Deportivo Alavés | Alavés | Alaves
+team:saint-etienne = AS Saint-Étienne | Saint-Étienne | Saint Etienne | St Etienne | ASSE
+team:rodez = Rodez AF | Rodez
+team:kashiwa-reysol = Kashiwa Reysol
+team:al-jazira = Al Jazira | Al-Jazira
+team:ararat-armenia = Ararat-Armenia | Ararat Armenia
+team:aris-thessaloniki = Aris Thessaloniki | Aris Salonika ; weak: Aris | Άρης
+team:aek-athens = AEK Athens | ΑΕΚ ; weak: AEK
+team:sudtirol = FC Südtirol | Südtirol | Sudtirol | Σουντιρόλ
+
+@club basketball
+team:anadolu-efes = Anadolu Efes | Anadolu Efes Istanbul ; weak: Efes
+team:virtus-bologna = Virtus Bologna | Virtus Segafredo Bologna | Βίρτους Μπολόνια
+team:olimpia-milano = Olimpia Milano | EA7 Emporio Armani Milano | Emporio Armani Milano | Armani Milano | AX Armani Exchange Milano | Αρμάνι Μιλάνο ; weak: Armani
+team:baskonia = Baskonia | Saski Baskonia | Baskonia Vitoria-Gasteiz
+team:maccabi-tel-aviv = Maccabi Tel Aviv | Maccabi Playtika Tel Aviv ; weak: Maccabi
+team:valencia-basket = Valencia Basket
+team:asvel = LDLC ASVEL | ASVEL | ASVEL Villeurbanne | Villeurbanne | Βιλερμπάν
+team:zalgiris-kaunas = Žalgiris Kaunas | Zalgiris Kaunas | BC Žalgiris ; weak: Žalgiris | Zalgiris
+team:dubai-basketball = Dubai Basketball | Dubai BC | Ντουμπάι ; weak: Dubai
+team:paris-basketball = Paris Basketball | Paris Basket
+team:hapoel-tel-aviv = Hapoel Tel Aviv | Hapoel IBI Tel Aviv
+team:manresa = BAXI Manresa | Bàsquet Manresa | Manresa | Μανρέσα
+team:derthona = Bertram Derthona | Derthona Tortona | Derthona Basket | Ντερτόνα
+team:buducnost = Budućnost | Buducnost | KK Budućnost | Budućnost VOLI
 
 @national any
 team:england = England
@@ -525,6 +588,7 @@ _PAREN = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 _LABEL = re.compile(r"\s*:\s*(?!\d\d\b)")
 # A side that is a part of an event, never a team: "Race 1 - Jarama", "Heat 2 - Lohéac", "Stage 5"
 _NOT_A_SIDE = re.compile(r"^(race|heat|stage|leg|round|session|practice|qualifying|sprint|semi final|final|run|moto)( \d+)?$")
+_STAGE = re.compile(r"(?:\d+(?:st|nd|rd|th)\s+(?:test|odi|t20i?|one-day international)|(?:first|second|third|fourth|fifth)\s+test)\s*[:\-–]?\s+", re.I)
 _LEADLIVE = re.compile(r"^\s*(?:live|en vivo|en directo|ao vivo|en direct|direct|diretta)\b\s*[:!|-]?\s*", re.I)
 
 
@@ -580,6 +644,58 @@ def _load(data: str) -> list[Entity]:
     return out
 
 
+
+# Greek guides (Cosmote, Nova) name foreign clubs and countries in Greek, often not letter-for-letter
+# ("Ρεάλ Μαδρίτης": Real of Madrid; "Κολωνία": Cologne). Added to each entity's names at load; any
+# other Greek side goes through greek_side() (sound-alike matching) in resolve_side.
+GREEK_NAMES = {
+    "real-madrid": "Ρεάλ Μαδρίτης", "barcelona": "Μπαρτσελόνα", "atletico-madrid": "Ατλέτικο Μαδρίτης",
+    "athletic-club": "Αθλέτικ Μπιλμπάο", "real-sociedad": "Ρεάλ Σοσιεδάδ", "real-betis": "Μπέτις | Ρεάλ Μπέτις",
+    "sevilla": "Σεβίλλη", "valencia-cf": "Βαλένθια", "villarreal": "Βιγιαρεάλ", "celta-vigo": "Θέλτα | Σέλτα Βίγο",
+    "girona": "Τζιρόνα", "osasuna": "Οσασούνα", "getafe": "Χετάφε", "rayo-vallecano": "Ράγιο Βαγιεκάνο",
+    "mallorca": "Μαγιόρκα", "espanyol": "Εσπανιόλ", "elche": "Έλτσε", "deportivo-la-coruna": "Ντεπορτίβο Λα Κορούνια",
+    "juventus": "Γιουβέντους", "inter-milan": "Ίντερ", "ac-milan": "Μίλαν", "napoli": "Νάπολι", "as-roma": "Ρόμα",
+    "lazio": "Λάτσιο", "atalanta": "Αταλάντα", "fiorentina": "Φιορεντίνα", "bologna": "Μπολόνια", "torino": "Τορίνο",
+    "como": "Κόμο", "venezia": "Βενέτσια", "udinese": "Ουντινέζε", "cagliari": "Κάλιαρι", "genoa": "Τζένοα",
+    "sassuolo": "Σασουόλο", "parma": "Πάρμα", "lecce": "Λέτσε", "monza": "Μόντσα",
+    "bayern-munich": "Μπάγερν Μονάχου | Μπάγερν", "borussia-dortmund": "Ντόρτμουντ | Μπορούσια Ντόρτμουντ",
+    "bayer-leverkusen": "Λεβερκούζεν | Μπάγερ Λεβερκούζεν", "rb-leipzig": "Λειψία", "eintracht-frankfurt": "Άιντραχτ Φρανκφούρτης | Αϊντραχτ Φρανκφούρτης",
+    "vfb-stuttgart": "Στουτγκάρδη", "borussia-monchengladbach": "Γκλάντμπαχ | Μπορούσια Μενχενγκλάντμπαχ",
+    "vfl-wolfsburg": "Βόλφσμπουργκ", "sc-freiburg": "Φράιμπουργκ", "werder-bremen": "Βέρντερ Βρέμης | Βέρντερ",
+    "union-berlin": "Ουνιόν Βερολίνου", "hamburger-sv": "Αμβούργο", "tsg-hoffenheim": "Χόφενχαϊμ", "fc-augsburg": "Άουγκσμπουργκ",
+    "schalke-04": "Σάλκε", "1-fc-koln": "Κολωνία", "paris-saint-germain": "Παρί Σεν Ζερμέν | Παρί", "marseille": "Μαρσέιγ | Μαρσέιγ",
+    "lyon": "Λιόν", "as-monaco": "Μονακό", "lille": "Λιλ", "ogc-nice": "Νις", "rc-lens": "Λανς", "stade-rennais": "Ρεν",
+    "strasbourg": "Στρασβούργο", "fc-nantes": "Ναντ", "benfica": "Μπενφίκα", "fc-porto": "Πόρτο", "sporting-cp": "Σπόρτινγκ Λισαβόνας | Σπόρτινγκ",
+    "sc-braga": "Μπράγκα", "ajax": "Άγιαξ", "psv-eindhoven": "Άιντχοφεν | Αϊντχόφεν", "feyenoord": "Φέγενορντ",
+    "az-alkmaar": "Άλκμααρ | ΑΖ Άλκμααρ", "galatasaray": "Γαλατασαράι", "fenerbahce": "Φενέρμπαχτσε", "besiktas": "Μπεσίκτας",
+    "trabzonspor": "Τράμπζονσπορ", "club-brugge": "Μπριζ | Κλαμπ Μπριζ", "anderlecht": "Άντερλεχτ", "red-bull-salzburg": "Σάλτσμπουργκ",
+    "shakhtar-donetsk": "Σαχτάρ Ντονέτσκ | Σαχτάρ", "dinamo-zagreb": "Ντινάμο Ζάγκρεμπ", "red-star-belgrade": "Ερυθρός Αστέρας",
+    "panathinaikos": "Παναθηναϊκός", "ofi-crete": "ΟΦΗ", "celtic": "Σέλτικ", "rangers": "Ρέιντζερς", "aberdeen": "Αμπερντίν",
+    "motherwell": "Μάδεργουελ", "arsenal": "Άρσεναλ", "aston-villa": "Άστον Βίλα", "chelsea": "Τσέλσι", "liverpool": "Λίβερπουλ",
+    "manchester-city": "Μάντσεστερ Σίτι", "manchester-united": "Μάντσεστερ Γιουνάιτεντ", "tottenham-hotspur": "Τότεναμ",
+    "newcastle-united": "Νιούκαστλ", "west-ham-united": "Γουέστ Χαμ", "everton": "Έβερτον", "brighton-hove-albion": "Μπράιτον",
+    "crystal-palace": "Κρίσταλ Πάλας", "fulham": "Φούλαμ", "brentford": "Μπρέντφορντ", "afc-bournemouth": "Μπόρνμουθ",
+    "nottingham-forest": "Νότιγχαμ Φόρεστ", "wolverhampton-wanderers": "Γουλβς | Γουλβερχάμπτον", "leeds-united": "Λιντς",
+    "burnley": "Μπέρνλι", "sunderland": "Σάντερλαντ", "nk-celje": "Τσέλιε", "heerenveen": "Χέρενφεν | Χέρενφεϊν",
+    "nec-nijmegen": "Ναϊμέγκεν", "sparta-prague": "Σπάρτα Πράγας", "bodo-glimt": "Μπόντο Γκλιμτ", "legia-warsaw": "Λέγκια Βαρσοβίας | Λέγκια",
+    "basel": "Βασιλεία", "lech-poznan": "Λεχ Πόζναν", "famalicao": "Φαμαλικάο", "vitoria-guimaraes": "Βιτόρια Γκιμαράες",
+    "england": "Αγγλία", "scotland": "Σκωτία", "wales": "Ουαλία", "northern-ireland": "Βόρεια Ιρλανδία", "republic-of-ireland": "Ιρλανδία",
+    "france": "Γαλλία", "germany": "Γερμανία", "spain": "Ισπανία", "italy": "Ιταλία", "portugal": "Πορτογαλία", "netherlands": "Ολλανδία",
+    "belgium": "Βέλγιο", "brazil": "Βραζιλία", "argentina": "Αργεντινή", "united-states": "ΗΠΑ", "mexico": "Μεξικό", "croatia": "Κροατία",
+    "denmark": "Δανία", "sweden": "Σουηδία", "norway": "Νορβηγία", "poland": "Πολωνία", "turkey": "Τουρκία", "switzerland": "Ελβετία",
+    "austria": "Αυστρία", "morocco": "Μαρόκο", "japan": "Ιαπωνία", "south-korea": "Νότια Κορέα", "australia": "Αυστραλία",
+    "uruguay": "Ουρουγουάη", "colombia": "Κολομβία", "finland": "Φινλανδία", "iceland": "Ισλανδία", "greece": "Ελλάδα",
+    "serbia": "Σερβία", "czechia": "Τσεχία", "hungary": "Ουγγαρία", "romania": "Ρουμανία", "ukraine": "Ουκρανία", "slovakia": "Σλοβακία",
+    "slovenia": "Σλοβενία", "albania": "Αλβανία", "bosnia-and-herzegovina": "Βοσνία-Ερζεγοβίνη | Βοσνία Ερζεγοβίνη",
+    "north-macedonia": "Βόρεια Μακεδονία", "montenegro": "Μαυροβούνιο", "israel": "Ισραήλ", "bulgaria": "Βουλγαρία",
+    "kazakhstan": "Καζακστάν", "azerbaijan": "Αζερμπαϊτζάν", "armenia": "Αρμενία", "estonia": "Εσθονία", "latvia": "Λετονία",
+    "lithuania": "Λιθουανία", "faroe-islands": "Νήσοι Φερόες", "malta": "Μάλτα", "moldova": "Μολδαβία", "kosovo": "Κόσοβο",
+    "belarus": "Λευκορωσία", "andorra": "Ανδόρα", "san-marino": "Άγιος Μαρίνος", "gibraltar": "Γιβραλτάρ", "liechtenstein": "Λιχτενστάιν",
+    "luxembourg": "Λουξεμβούργο", "egypt": "Αίγυπτος", "algeria": "Αλγερία", "tunisia": "Τυνησία", "nigeria": "Νιγηρία",
+    "senegal": "Σενεγάλη", "ghana": "Γκάνα", "cameroon": "Καμερούν", "canada": "Καναδάς", "chile": "Χιλή", "peru": "Περού",
+    "ecuador": "Εκουαδόρ", "paraguay": "Παραγουάη", "iran": "Ιράν", "qatar": "Κατάρ", "saudi-arabia": "Σαουδική Αραβία",
+}
+
 ENTITIES = _load(DATA)
 BY_ID_KEY: dict[str, Entity] = {}          # stable id (and old ids) -> entity: what favourites resolve through
 for _e in ENTITIES:
@@ -587,6 +703,9 @@ for _e in ENTITIES:
         if _k in BY_ID_KEY:
             raise ValueError(f"sports DATA: id {_k} used twice")
         BY_ID_KEY[_k] = _e
+for _k, _names in GREEK_NAMES.items():
+    _e = BY_ID_KEY[f"team:{_k}"]
+    _e.names = list(dict.fromkeys(_e.names + [norm(n) for n in _names.split("|") if norm(n)]))
 STRONG: dict[str, list[int]] = {}          # phrase -> entities (a phrase can only be strong for one)
 WEAK: dict[str, list[int]] = {}
 for _e in ENTITIES:
@@ -657,6 +776,107 @@ def has_any(words: list[str], table: set) -> bool:
     return bool(_find(words, table))
 
 
+# ---- Greek sides not in GREEK_NAMES: transliterate, then match by sound against the clubs' and
+# countries' Latin names ("Ουντινέζε" -> oudineze -> Udinese). Only a single clear candidate counts.
+_GREEK = re.compile(r"[\u0370-\u03ff\u1f00-\u1fff]")
+_GR_START = (("μπ", "b"), ("ντ", "d"), ("γκ", "g"))
+_GR_DI = (("μπ", "b"), ("ντ", "nt"), ("γκ", "g"), ("γγ", "ng"), ("τσ", "ts"), ("τζ", "tz"), ("ου", "ou"), ("αι", "e"),
+          ("ει", "i"), ("οι", "i"), ("υι", "i"), ("αυ", "av"), ("ευ", "ev"))
+_GR_ONE = dict(zip("αβγδεζηθικλμνξοπρσςτυφχψω", ("a", "v", "g", "d", "e", "z", "i", "th", "i", "k", "l", "m", "n", "x", "o",
+                                                  "p", "r", "s", "s", "t", "i", "f", "ch", "ps", "o")))
+_PHON = (("ph", "f"), ("th", "t"), ("ch", "k"), ("ck", "k"), ("c", "k"), ("q", "k"), ("w", "v"), ("y", "i"), ("j", "i"),
+         ("z", "s"), ("x", "ks"), ("ou", "u"), ("ae", "e"), ("oe", "e"), ("ei", "i"))
+
+
+def greek_latin(text: str, nt: str = "nt") -> str:
+    """'Ντόρτμουντ' -> 'dortmount': Greek letters as they sound (digraphs first, word-initial ντ = d;
+    inside a word ντ is "nt" (Αταλάντα) or "d" (Ουντινέζε): nt= picks)."""
+    out = []
+    for w in norm(text).split():
+        w = re.sub(r"γι(?=[αεηιοωυ])", "i", w)                 # Γιουβέντους: "yu"
+        for a, b in _GR_START:
+            if w.startswith(a):
+                w = b + w[2:]
+        for a, b in _GR_DI:
+            w = w.replace(a, nt if a == "ντ" else b)
+        out.append("".join(_GR_ONE.get(c, c) for c in w))
+    return " ".join(out)
+
+
+def _phon(text: str) -> str:
+    t = "".join(text.split())
+    for a, b in _PHON:
+        t = t.replace(a, b)
+    return re.sub(r"(.)\1+", r"\1", t)
+
+
+def _lev(a: str, b: str, cap: int) -> int:
+    if abs(len(a) - len(b)) > cap:
+        return cap + 1
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        if min(cur) > cap:
+            return cap + 1
+        prev = cur
+    return prev[-1]
+
+
+_SOUNDS: dict[str, set[int]] | None = None        # sound key of a Latin name (or a distinctive word of one) -> entities
+
+
+def _sounds() -> dict[str, set[int]]:
+    global _SOUNDS
+    if _SOUNDS is None:
+        whole: dict[str, set[int]] = {}
+        words: dict[str, set[int]] = {}
+        for e in ENTITIES:
+            if e.kind not in ("club", "national"):
+                continue
+            for n in e.names:
+                if _GREEK.search(n):
+                    continue
+                ws = [w for w in n.split() if w not in GENERIC]
+                for k in {_phon(n), _phon(" ".join(ws))}:
+                    whole.setdefault(k, set()).add(e.id)
+                for w in ws:
+                    if len(w) >= 6:
+                        words.setdefault(_phon(w), set()).add(e.id)
+        for k, ids in words.items():                            # a word only one team uses ("dortmund")
+            if len(ids) == 1:
+                whole.setdefault(k, set()).update(ids)
+        _SOUNDS = whole
+    return _SOUNDS
+
+
+def greek_side(words: list[str]) -> int:
+    """A Greek side -> entity id, or -1 unless exactly one club/country sounds like it."""
+    text = " ".join(w for w in words if w not in GENERIC)
+    hits = {i for nt in ("nt", "d") if (i := _greek_one(_phon(greek_latin(text, nt)))) >= 0}
+    return hits.pop() if len(hits) == 1 else -1
+
+
+def _greek_one(key: str) -> int:
+    idx = _sounds()
+    if len(idx.get(key, ())) == 1:
+        return next(iter(idx[key]))
+    if len(key) < 6:
+        return -1
+    cap = 1 if len(key) < 9 else 2
+    found: dict[int, set[int]] = {}
+    for k, ids in idx.items():
+        if len(k) >= 5:
+            d = _lev(key, k, cap)
+            if d <= cap:
+                found.setdefault(d, set()).update(ids)
+    if not found:
+        return -1
+    best = found[min(found)]
+    return next(iter(best)) if len(best) == 1 else -1
+
+
 def resolve_side(side: str) -> tuple[int, str, bool]:
     """A match side -> (entity id or -1, key text, women). Weak names count here: a whole side."""
     words = norm(side).split()
@@ -670,6 +890,10 @@ def resolve_side(side: str) -> tuple[int, str, bool]:
         ids = STRONG.get(cand) or WEAK.get(cand)
         if ids and len(ids) == 1 and ENTITIES[ids[0]].kind in ("club", "national"):
             return ids[0], ENTITIES[ids[0]].key, women
+    if _GREEK.search(text):
+        i = greek_side(words)
+        if i >= 0:
+            return i, ENTITIES[i].key, women
     key = " ".join(w for w in words if w not in GENERIC)
     return -1, key, women
 
@@ -704,6 +928,9 @@ def split_match(title: str) -> tuple[str, str, str, bool] | None:
         right = _TAIL.split(right, 1)[0]
         left = _TAIL.split(left, 1)[0] if dashed else left
         label = " ".join(segs[:k])
+        stage = _STAGE.match(left.strip())                 # "4th Test England vs India": the stage is not a side
+        if stage:
+            label, left = (label + " " + stage.group(0)).strip(), left.strip()[stage.end():]
         if left.strip() and right.strip():
             return label, left.strip(" -–"), right.strip(" -–"), dashed
         return None

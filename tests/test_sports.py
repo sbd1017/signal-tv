@@ -205,7 +205,7 @@ class Events(unittest.TestCase):
         self.assertEqual([(e["sport"], sorted(e["ids"])) for e in bk], [("basketball", ["l_ar", "l_bk"])])
         f1 = [e for e in self.ev if e["sport"] == "f1"]
         self.assertEqual([sorted(e["ids"]) for e in f1], [["l_f1", "l_f1b"]])
-        acl = self.find("Esteghlal FC vs Al Sadd")
+        acl = self.find("Esteghlal vs Al Sadd")                  # both known now: the cards use their names
         self.assertEqual((acl[0]["comp"], acl[0]["sport"]), ("AFC Champions League", "football"))
 
 
@@ -286,6 +286,35 @@ class Endpoint(unittest.TestCase):
         no_hevc = self.c.get("/tv/api/sports", params={"caps": "avc.1080.60.s"}).json()["events"][0]
         self.assertNotEqual(no_hevc["channels"][0]["id"], "l_tnt1")         # a 4K HEVC feed isn't first without HEVC
         self.assertEqual(self.c.get("/tv/api/sports", params={"day": "tomorrow"}).status_code, 200)
+
+
+class GreekSides(unittest.TestCase):
+    """Greek guides name foreign clubs and countries in Greek: by the Greek names in the dataset, or by
+    sound (transliterated, then matched against the Latin names), and only to one clear candidate."""
+
+    def test_greek_names(self):
+        for side, key in (("Ρεάλ Μαδρίτης", "team:real-madrid"), ("Κολωνία", "team:1-fc-koln"), ("Αμβούργο", "team:hamburger-sv"),
+                          ("Βέρντερ Βρέμης", "team:werder-bremen"), ("Ισπανία", "team:spain"), ("Ομόνοια", "team:omonia-nicosia"),
+                          ("Βιλερμπάν", "team:asvel")):
+            self.assertEqual(sports.resolve_side(side)[1], key, side)
+
+    def test_by_sound(self):
+        self.assertEqual(sports.greek_latin("Ντόρτμουντ"), "dortmount")          # word-initial ντ is d, inside nt
+        self.assertEqual(sports.greek_latin("Γιουβέντους"), "iouventous")
+        for side, key in (("Ουντινέζε", "team:udinese"), ("Λεβερκούζεν", "team:bayer-leverkusen"), ("Μπεσίκτας", "team:besiktas"),
+                          ("Ναϊμέγκεν", "team:nec-nijmegen"), ("Αλβέρκα", "team:alverca"), ("Κροατία", "team:croatia")):
+            self.assertEqual(sports.greek_side(sports.norm(side).split()), sports.BY_ID_KEY[key].id, side)
+
+    def test_no_guessing(self):
+        for side in ("Στιγμιότυπα", "Ρεάλ", "Ντένβερ Μπρόνκος", "Σιάτλ Σίχοκς", "Ουλμ"):    # highlights, too short, NFL
+            self.assertEqual(sports.resolve_side(side)[0], -1, side)
+
+    def test_new_spellings(self):
+        for side, key in (("Olympique Marseille", "team:marseille"), ("Olympiakos Piraeus", "team:olympiacos"),
+                          ("Sund'land", "team:sunderland"), ("Real Madryt", "team:real-madrid"), ("St Gilloisse", "team:union-saint-gilloise"),
+                          ("Köln", "team:1-fc-koln"), ("Fortuna Köln", "team:fortuna-koln")):
+            self.assertEqual(sports.resolve_side(side)[1], key, side)
+        self.assertEqual(sports.resolve_side("Kiel")[0], -1, "THW Kiel plays handball: no football crest for a bare Kiel")
 
 
 if __name__ == "__main__":

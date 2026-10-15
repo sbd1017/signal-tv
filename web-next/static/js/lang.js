@@ -110,6 +110,13 @@ export function titleKey(clean, year) {
   return k ? `${k}|${year}` : '';
 }
 
+// Browsing (Films / Series grids) with 'English first' or 'English only': English titles before
+// unlabelled ones, then foreign catalogues, then dubbed - each block keeping the viewer's own sort
+// order (newest, A-Z…). Without it, a provider's newest additions can be a whole foreign catalogue.
+export function rankByLanguage(items, info) {
+  return items.map((it, i) => [info(it).tier, i, it]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
+}
+
 // Apply the catalogue preference to a list already in the order the viewer asked for.
 //   'all'   unchanged
 //   'first' versions of the same title are gathered at the first one's place, English first

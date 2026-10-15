@@ -106,10 +106,12 @@ export function eventStatus(raw) {
 }
 
 // "RC Lens vs Sporting CP" -> ["RC Lens", "Sporting CP"]; null when the title is not a pairing.
+// A cricket stage in front of the first side is not part of its name: "4th Test England vs India".
+const STAGE = /^(?:\d+(?:st|nd|rd|th)\s+(?:test|odi|t20i?|one-day international|match|game)|(?:first|second|third|fourth|fifth)\s+test)\s*[:\-–]?\s+/i;
 export function teams(title) {
   const m = String(title || '').match(/^(.+?)\s+(?:vs\.?|v\.?|x|-|–)\s+(.+)$/i);
   if (!m || m[1].length > 40 || m[2].length > 40) return null;
-  return [m[1].trim(), m[2].trim()];
+  return [m[1].trim().replace(STAGE, ''), m[2].trim()];
 }
 
 // Film / series titles: "4K-FR-HDR - La Course des animaux (2026)" -> prefix "4K-FR-HDR",

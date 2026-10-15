@@ -558,6 +558,10 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .crest.real { background: radial-gradient(circle, rgba(255, 255, 255, .12), transparent 70%); box-shadow: none; }
 .crest.real::after { display: none; }
 .crest.real img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .55)); }
+/* a national side outside football (or without a federation crest): its flag, round */
+.crest.flag { overflow: hidden; background: none; box-shadow: 0 0 0 1px rgba(255, 255, 255, .18), 0 2px 6px rgba(0, 0, 0, .45); }
+.crest.flag::after { display: none; }
+.crest.flag img { width: 100%; height: 100%; object-fit: cover; }
 .fixture.feature .crest.real, .fixture.major .crest.real { background: radial-gradient(circle, rgba(255, 255, 255, .16), transparent 68%); }
 .fx-comp.has-logo::before { display: none; }
 .comp-logo { width: 18px; height: 18px; object-fit: contain; flex: none; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6)); }
@@ -588,6 +592,10 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .sp-star.on .ico, .sp-fav-chip.on .ico { fill: currentColor; }
 .sp-star .ico { width: 17px; height: 17px; }
 .sp-fav-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
+.sp-jump .chip { gap: 6px; }
+.sp-jump .ico { width: 14px; height: 14px; opacity: .7; }
+.sp-block { scroll-margin-top: 84px; }
 .sp-tag { font: 700 10.5px var(--f-num); letter-spacing: .04em; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-2); border-radius: 5px; padding: 3px 5px 2px; flex: none; }
 .sp-tag.replay { color: var(--text-2); background: rgba(255, 255, 255, .06); }
 

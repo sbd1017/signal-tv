@@ -3,7 +3,7 @@
 //   node --test tests/test_next.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { feedLang, feedRegion, orderFeeds, versionTier, versionCode, applyLangPref, titleKey, TIER } from '../web-next/static/js/lang.js';
+import { feedLang, feedRegion, orderFeeds, versionTier, versionCode, applyLangPref, rankByLanguage, titleKey, TIER } from '../web-next/static/js/lang.js';
 import { windowOf, candidates, eligible, recentIds, remember, rng, stem } from '../web-next/static/js/hero.js';
 import { pickEpisode } from '../web-next/static/js/shuffle.js';
 import { film, parse, teams, caps, twinLabel, cardTitle, eventStatus } from '../web-next/static/js/names.js';
@@ -97,6 +97,13 @@ test('English first: versions gather at the first one, English leading; other ti
   const items = cat(['GR - Ballerina (2025)', 'EN - Dune (2021)', 'DE - Ballerina (2025)', 'EN - Ballerina (2025)', 'NF - Ballerina (2025)']);
   assert.deepEqual(ids(applyLangPref(items, 'first', infoOf)),
     ['EN - Ballerina (2025)', 'NF - Ballerina (2025)', 'GR - Ballerina (2025)', 'DE - Ballerina (2025)', 'EN - Dune (2021)']);
+});
+
+test('browsing with English first: English titles lead, then unlabelled, subtitled, dubbed - each in the chosen order', () => {
+  // newest first, as the provider added them: a Spanish batch on top
+  const items = cat(['ES - Trío (2017)', 'ES - Rebeldes (1983)', 'EN - Dune (2021)', 'NF - Bros (IL)', 'GR - Kapodistrias: The Governor (2025)', 'EN - Heat (1995)']);
+  assert.deepEqual(ids(rankByLanguage(applyLangPref(items, 'first', infoOf), infoOf)),
+    ['EN - Dune (2021)', 'EN - Heat (1995)', 'NF - Bros (IL)', 'GR - Kapodistrias: The Governor (2025)', 'ES - Trío (2017)', 'ES - Rebeldes (1983)']);
 });
 
 test('English only: drops dubbed, drops subtitled only when an English/unknown version exists, keeps unknown', () => {
@@ -391,4 +398,15 @@ test('event status: the word the provider puts first, for the line under the car
   assert.equal(eventStatus('(Fanatiz 064) | Alianza vs Inter Bogotá (2026-10-24 17:05:00)'), '');
   assert.equal(eventStatus('UK: SKY SPORTS MAIN EVENT ᴿᴬᵂ'), '');
   assert.equal(eventStatus('LIVE TV'), '');
+});
+
+test('flags: a national side by its name in any of the guides\' languages; both sides or neither', async () => {
+  const { flagCode, pairFlags } = await import('../web-next/static/js/flags.js');
+  for (const [label, code] of [['Australia (W)', 'au'], ['England', 'gb-eng'], ['England U21', 'gb-eng'], ['Ισπανία', 'es'], ['Słowenia', 'si'],
+    ['Czechia', 'cz'], ['Czech Republic', 'cz'], ['United States', 'us'], ['Korea Republic', 'kr'], ['Bosnia & Herzegovina', 'ba'], ['Brasil Femenino', 'br']]) {
+    assert.equal(flagCode(label), code, label);
+  }
+  for (const label of ['Arsenal', 'Real Madrid', 'Alabama', '']) assert.equal(flagCode(label), '', label);
+  assert.deepEqual(pairFlags(['Georgia', 'Alabama']), ['', ''], 'one country is not a national match');
+  assert.deepEqual(pairFlags(['Australia (W)', 'Bangladesh (W)']), ['au', 'bd']);
 });
