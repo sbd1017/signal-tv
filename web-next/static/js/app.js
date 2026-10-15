@@ -756,11 +756,12 @@ async function loadArt(ids, labels = []) {
 
 // Live or replay, from the real fixture dates (the Pi's tvnext/fixtures.py): many channels re-air a
 // match days later with nothing in the guide to say so. "home|away|start" -> {live} | {replay, played};
-// asked for today's football with two known teams, answered from the Pi's cache, the rest looked up
+// asked for today's football, basketball and NFL with two known teams, answered from the Pi's cache, the rest looked up
 // in the background (another paint picks them up).
 const fixtureIdx = new Map();
 const fixtureAsked = new Map();
-const fxKey = (ev) => (ev.sport === 'football' && (ev.teams || []).length === 2 && ev.teams.every((t) => String(t).startsWith('team:'))
+const FX_SPORTS = new Set(['football', 'basketball', 'nfl']);           // what TheSportsDB has fixtures for
+const fxKey = (ev) => (FX_SPORTS.has(ev.sport) && (ev.teams || []).length === 2 && ev.teams.every((t) => String(t).startsWith('team:'))
   ? `${ev.teams[0]}|${ev.teams[1]}|${ev.start}` : '');
 async function loadFixtures(evs) {
   const now = Date.now();

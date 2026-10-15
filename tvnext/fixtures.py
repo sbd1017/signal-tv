@@ -93,7 +93,7 @@ class Fixtures:
             q = f"{self.name(home)} vs {self.name(away)}".replace(" ", "_")
             data = await self.src.api(f"searchevents.php?{httpx.QueryParams({'e': q})}")
             for ev in (data or {}).get("event") or []:
-                if (ev.get("strSport") or "Soccer") != "Soccer":
+                if (ev.get("strSport") or "Soccer") not in ("Soccer", "Basketball", "American Football"):
                     continue
                 ts = ev.get("strTimestamp") or ""
                 try:
