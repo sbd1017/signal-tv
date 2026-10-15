@@ -7,6 +7,7 @@ import os
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
@@ -19,7 +20,7 @@ except ImportError:                     # the app's own venv: the sidecar's (req
 os.environ.setdefault("TVN_STATE", tempfile.mkdtemp())
 os.environ.setdefault("TVN_CACHE", tempfile.mkdtemp())
 
-from tvnext import config, fixtures, images, sportsart  # noqa: E402
+from tvnext import config, fixtures, images, scores, sportsart  # noqa: E402
 
 ENTS = sportsart.entities()
 
@@ -564,6 +565,43 @@ class Fixtures(unittest.TestCase):
             self.assertEqual(pending, 0)
             again = fixtures.Fixtures(lib, src, Path(tmp) / "fixtures.json")       # kept across restarts
             self.assertIn("team:aston-villa|team:brentford|1792076400", again.ask([item])[0])
+
+
+class Scores(unittest.TestCase):
+    """Live scores from an ESPN scoreboard, matched to our teams by name."""
+    BOARD = {"events": [
+        {"date": "2026-10-15T19:00Z", "status": {"displayClock": "67'", "type": {"state": "in", "shortDetail": "67'"}},
+         "competitions": [{"competitors": [
+             {"homeAway": "home", "score": "3", "team": {"displayName": "Lyon", "shortDisplayName": "Lyon"}},
+             {"homeAway": "away", "score": "2", "team": {"displayName": "Crystal Palace", "shortDisplayName": "Palace"}}]}]},
+        {"date": "2026-10-15T19:00Z", "status": {"displayClock": "45'", "type": {"state": "in", "shortDetail": "Halftime"}},
+         "competitions": [{"competitors": [
+             {"homeAway": "home", "score": "0", "team": {"displayName": "Nowhere Rovers"}},
+             {"homeAway": "away", "score": "1", "team": {"displayName": "Arsenal"}}]}]}]}
+
+    def test_board(self):
+        b = scores.parse_board(self.BOARD, 1)
+        self.assertEqual(list(b), [frozenset({"team:lyon", "team:crystal-palace"})], "both sides known, or no score")
+        hit = b[frozenset({"team:lyon", "team:crystal-palace"})]
+        self.assertEqual((hit["score"], hit["clock"], hit["state"]), ({"team:lyon": "3", "team:crystal-palace": "2"}, "67'", "in"))
+
+    def test_ask(self):
+        board = self.BOARD
+
+        class Client:
+            async def get(self, url, params=None, headers=None, timeout=None):
+                self.url, self.params = url, params
+                return SimpleNamespace(status_code=200, json=lambda: board)
+        c = Client()
+        s = scores.Scores(c)
+        start = int(datetime(2026, 10, 15, 18, 45, tzinfo=timezone.utc).timestamp())      # the airing, before kick-off
+        got = asyncio.run(s.ask([("comp:uefa-europa-league", "team:crystal-palace", "team:lyon", start),
+                                 ("comp:no-such", "team:lyon", "team:crystal-palace", start)]))
+        self.assertEqual(list(got), [f"comp:uefa-europa-league|team:crystal-palace|team:lyon|{start}"])
+        self.assertIn("uefa.europa/scoreboard", c.url)
+        self.assertEqual(c.params, {"dates": "20261015"})
+        late = start + 26 * 3600                                                           # a meeting a day later: not this one
+        self.assertEqual(asyncio.run(s.ask([("comp:uefa-europa-league", "team:lyon", "team:crystal-palace", late)])), {})
 
 
 if __name__ == "__main__":

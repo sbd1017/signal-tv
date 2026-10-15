@@ -787,6 +787,9 @@ function withFixture(ev) {
   if (!v) return ev;
   return v.replay ? { ...ev, replay: true, played: v.played } : { ...ev, replay: false, played: 0 };
 }
+// Live scores on the live cards (the Pi's tvnext/scores.py, from ESPN): per device, and never on replays.
+const SCORES_KEY = 'tv.next.scores';
+const scoresOn = () => { try { return localStorage.getItem(SCORES_KEY) !== 'hide'; } catch { return true; } };
 const playedOn = (ts) => fmtDate(ts, { weekday: 'short', day: 'numeric', month: 'short' });
 const replayTag = (ev) => h('span', { class: 'sp-tag replay', text: ev.played ? `Replay · played ${playedOn(ev.played)}` : 'Replay' });
 
@@ -1025,6 +1028,8 @@ async function viewSports() {
     const ids = evs.flatMap((e) => [e.comp_id, ...(e.teams || [])]);
     const labels = evs.flatMap((e) => names.teams(e.title) || []);   // every side: exact per name
     loadArt(ids, labels).then((found) => { if (found && state.section === 'sports') paint(); });
+    shownLive = evs.filter((e) => e.when === 'live' && !e.replay);
+    loadScores();
     loadFixtures(foryou ? mine.events : data.events).then(({ found, pending }) => {
       if (state.section !== 'sports') return;
       if (found) paint();
@@ -1032,6 +1037,25 @@ async function viewSports() {
     });
   }
   let fixtureWait = 0;
+
+  // live scores: asked for the live, not-replayed matches on show; then every minute while Sports is open
+  const scoreIdx = new Map();                     // "comp|a|b|start" -> {score: {team: '2'}, clock, state, detail}
+  let shownLive = [];
+  const scKey = (ev) => (ev.when === 'live' && !ev.replay && ev.comp_id && (ev.teams || []).length === 2
+    ? `${ev.comp_id}|${ev.teams[0]}|${ev.teams[1]}|${ev.start}` : '');
+  async function loadScores() {
+    if (!scoresOn() || document.hidden) return;
+    const keys = [...new Set(shownLive.map(scKey).filter(Boolean))].slice(0, 40);
+    if (!keys.length) return;
+    try {
+      const res = await fetch(`${NEXT}/api/scores?${new URLSearchParams({ q: keys.join(',') })}`, { credentials: 'same-origin' });
+      const d = res.ok ? await res.json() : { items: {} };
+      for (const k of keys) { if (d.items[k]) scoreIdx.set(k, d.items[k]); else scoreIdx.delete(k); }
+    } catch { return; }
+    for (const li of list.querySelectorAll('.fixture[data-sk]')) paintScore(li, scoreIdx.get(li.dataset.sk));
+  }
+  const scoreTimer = setInterval(() => { if (state.section === 'sports') loadScores(); }, 60000);
+  state.cleanup.push(() => clearInterval(scoreTimer));
 
   const blockHead = (title, n) => h('div', { class: 'sp-block-head' }, h('h2', { class: 'section-title', text: title }), h('span', { class: 'n', text: String(n) }));
 
@@ -1212,10 +1236,14 @@ async function viewSports() {
     const [star, favRow] = favControl(ev, li);
     const meta = [ev.comp, ['all', 'foryou'].includes(pick.sport) || !ev.comp ? SPORT_NAMES[ev.sport] : ''].filter(Boolean).join(' · ');
     const where = `sports:${size || 'compact'}`;
+    const sk = scoresOn() ? scKey(ev) : '';
     const top = h('div', { class: 'fx-top' }, h('span', { class: `live-pill ${ev.replay ? 'replay' : ''}`, text: ev.replay ? 'Replay' : 'Live' }),
+      sk ? h('span', { class: 'fx-clock', hidden: true }) : null,
       compLabel(ev, meta || SPORT_NAMES[ev.sport] || 'Sport', where), ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, star);
     const sides = teamSides(ev);
-    const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.id, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }, t.flag), capsSpan(t.label))))
+    const name = (t) => { const s = capsSpan(t.label); s.classList.add('fx-name'); return s; };
+    const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.id, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }, t.flag), name(t),
+      sk ? h('span', { class: 'fx-score', dataset: { team: t.id || '' }, 'aria-hidden': 'true' }) : null)))
       : h('div', { class: 'fx-title' }, capsSpan(ev.title));
     const mainBtn = h('button', { class: 'fx-main', type: 'button', 'aria-label': `Play ${ev.title} on ${best.ch.name}` }, title);
     mainBtn.addEventListener('click', () => playChannel(best.ch));
@@ -1234,7 +1262,23 @@ async function viewSports() {
     li.append(top, favRow || '', mainBtn, time, h('div', { class: 'fx-bottom' }, bestBtn, feedNote(ev)));
     if (peek) li.append(peek);
     if (tog) li.append(tog, feeds);
+    if (sk) { li.dataset.sk = sk; paintScore(li, scoreIdx.get(sk)); }
     return li;
+  }
+
+  // the score beside each side and the minute beside LIVE; nothing at all until ESPN has the match under way
+  function paintScore(li, d) {
+    const on = d && (d.state === 'in' || d.state === 'post') && Object.values(d.score || {}).some((v) => v !== '');
+    for (const s of li.querySelectorAll('.fx-score')) s.textContent = on ? (d.score[s.dataset.team] ?? '') : '';
+    const c = li.querySelector('.fx-clock');
+    const when = !on ? '' : d.state === 'post' ? 'FT' : /half/i.test(d.detail || '') ? 'HT' : String(d.clock || '').replace(/'/g, '′');
+    if (c) { c.textContent = when; c.hidden = !when; }
+    li.classList.toggle('has-score', !!on);
+    const main = li.querySelector('.fx-main');
+    if (main && on) {
+      const sides = [...li.querySelectorAll('.fx-team')].map((r) => `${r.querySelector('.fx-name').title} ${r.querySelector('.fx-score').textContent}`);
+      main.setAttribute('aria-label', `${sides.join(', ')}${when ? `, ${when === 'HT' ? 'half time' : when === 'FT' ? 'full time' : when}` : ''}. ${main.getAttribute('aria-label').split('. ').pop()}`);
+    }
   }
 
   function departure(ev) {
@@ -2318,16 +2362,24 @@ function viewSettings() {
   const uiBox = h('section', { class: 'panel', id: 'lib-interface' });
   const timeBox = h('section', { class: 'panel', id: 'lib-time' });
   const famBox = h('section', { class: 'panel', id: 'lib-family', hidden: true });
+  const sportsBox = h('section', { class: 'panel', id: 'lib-sports' });
   const backupBox = h('section', { class: 'panel', id: 'lib-backup' });
   const statusBox = h('section', { class: 'panel', id: 'lib-status' });
   const artBox = h('section', { class: 'panel', id: 'lib-artwork' });
   view.replaceChildren(head('Settings', 'Languages and sync are shared by all your devices'),
-    h('div', { class: 'settings' }, tracksBox, uiBox, timeBox, famBox, backupBox, statusBox),
+    h('div', { class: 'settings' }, tracksBox, uiBox, timeBox, sportsBox, famBox, backupBox, statusBox),
     h('div', { class: 'settings-group' }, h('h2', { class: 'section-title', text: 'Diagnostics' }),
       h('div', { class: 'settings' }, artBox)));
   renderTrackPrefs(tracksBox);
   renderInterface(uiBox);
   renderTimes(timeBox);
+  sportsBox.replaceChildren(h('h2', { text: 'Sports' }),
+    h('label', { class: 'pref-row' }, h('span', { text: 'Live scores' }),
+      selectEl('Live scores', [['show', 'Show'], ['hide', 'Hide (no spoilers)']], scoresOn() ? 'show' : 'hide', (v) => {
+        try { localStorage.setItem(SCORES_KEY, v); } catch { /* private mode */ }
+        toast('Saved on this device');
+      })),
+    h('p', { class: 'muted small', text: 'The score and minute on live matches in Sports, updated every minute. Replays never show one. Only this device changes.' }));
   renderFamily(famBox);
   renderBackup(backupBox);
   renderStatus(statusBox);

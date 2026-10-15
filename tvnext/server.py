@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Res
 
 from tvapp import sports
 
-from . import config, fixtures, images, sportsart
+from . import config, fixtures, images, scores, sportsart
 
 log = logging.getLogger("tvnext")
 IMMUTABLE = "private, max-age=31536000, immutable"
@@ -30,6 +30,7 @@ class S:
     lib: sportsart.Library
     acq: sportsart.Acquirer
     fix: fixtures.Fixtures
+    scores: scores.Scores
     flushed = 0.0
 
 
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
     S.lib = sportsart.Library()
     S.acq = sportsart.Acquirer(S.lib, S.client)
     S.fix = fixtures.Fixtures(S.lib, S.acq.src, config.STATE / "fixtures.json")
+    S.scores = scores.Scores(S.client)
     tasks = [asyncio.create_task(S.acq.run()), asyncio.create_task(S.fix.run()), asyncio.create_task(_housekeeping())]
     yield
     S.lib.gaps.flush()
@@ -123,6 +125,20 @@ async def fixtures_index(q: str = ""):
         return JSONResponse({"items": {}, "pending": 0}, headers={"Cache-Control": "no-store"})
     found, pending = S.fix.ask(items)
     return JSONResponse({"items": found, "pending": pending}, headers={"Cache-Control": "no-store"})
+
+
+@route("GET", "/api/scores")
+async def scores_index(q: str = ""):
+    """Live scores for the live cards (tvnext/scores.py). q: "comp|team a|team b|start" items, comma-separated."""
+    items = []
+    for part in q.split(",")[:40]:
+        bits = part.split("|")
+        if len(bits) == 4 and bits[0].startswith("comp:") and ID.match(bits[0]) and all(ID.match(b) and b.startswith("team:") for b in bits[1:3]) \
+                and bits[3].isdigit():
+            items.append((bits[0], bits[1], bits[2], int(bits[3])))
+    if config.ART_MODE == "remote" or not items:
+        return JSONResponse({"items": {}}, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"items": await S.scores.ask(items)}, headers={"Cache-Control": "no-store"})
 
 
 @route("POST", "/api/art/gaps")

@@ -544,7 +544,7 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .fx-main { display: grid; gap: 10px; text-align: left; }
 .fx-teams { display: grid; gap: 8px; }
 .fx-team { display: flex; align-items: center; gap: 12px; min-width: 0; font: 800 23px/1 var(--f-cond); letter-spacing: .01em; }
-.fx-team > span:last-child { min-width: 0; padding-top: 2px; line-height: .98; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fx-team > .fx-name { min-width: 0; padding-top: 2px; line-height: .98; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .fx-title { font: 800 22px/1.05 var(--f-cond); letter-spacing: .01em; overflow-wrap: anywhere; }
 /* Futura Condensed has no Greek or Cyrillic (but does have a few look-alike symbols such as Δ): names in
    those scripts are set wholly in a face that covers the script, never letter by letter */
@@ -1019,3 +1019,9 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .family-head a { color: var(--muted); font-size: 13px; }
 .family-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .family-actions .input { flex: 1 1 180px; min-width: 0; }
+
+/* live scores (tvnext/scores.py): beside each side, in the names' own lettering; the minute beside LIVE */
+.fx-score { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; min-width: 1ch; text-align: right; flex: none; }
+.fx-score:empty { display: none; }
+.fx-clock { font: 700 12px/1 var(--f-num); letter-spacing: .04em; color: var(--text); padding: 4px 8px 3px; border-radius: 999px;
+  background: rgba(255, 255, 255, .1); flex: none; font-variant-numeric: tabular-nums; }
