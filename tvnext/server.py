@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Res
 
 from tvapp import sports
 
-from . import config, images, sportsart
+from . import config, fixtures, images, sportsart
 
 log = logging.getLogger("tvnext")
 IMMUTABLE = "private, max-age=31536000, immutable"
@@ -29,6 +29,7 @@ class S:
     client: httpx.AsyncClient
     lib: sportsart.Library
     acq: sportsart.Acquirer
+    fix: fixtures.Fixtures
     flushed = 0.0
 
 
@@ -37,9 +38,11 @@ async def lifespan(app: FastAPI):
     S.client = httpx.AsyncClient(follow_redirects=False, limits=httpx.Limits(max_connections=8))
     S.lib = sportsart.Library()
     S.acq = sportsart.Acquirer(S.lib, S.client)
-    tasks = [asyncio.create_task(S.acq.run()), asyncio.create_task(_housekeeping())]
+    S.fix = fixtures.Fixtures(S.lib, S.acq.src, config.STATE / "fixtures.json")
+    tasks = [asyncio.create_task(S.acq.run()), asyncio.create_task(S.fix.run()), asyncio.create_task(_housekeeping())]
     yield
     S.lib.gaps.flush()
+    S.fix.flush()
     for t in tasks:
         t.cancel()
     await S.client.aclose()
@@ -103,6 +106,22 @@ async def art_index(ids: str = "", names: str = ""):
     queued = S.acq.enqueue([i for i in want if i not in idx]) if config.ART_MODE != "remote" else 0
     return JSONResponse({"items": {i: idx[i] for i in want if i in idx}, "names": resolved, "queued": queued, "pending": S.acq.q.qsize()},
                         headers={"Cache-Control": "no-store"})
+
+
+@route("GET", "/api/fixtures")
+async def fixtures_index(q: str = ""):
+    """Live or replay, from the real fixture dates (tvnext/fixtures.py). q: "home|away|start" items,
+    comma-separated, team ids as the Sports API gives them; at most 80. Answers what is known now
+    and queues the rest; "pending" says how many lookups are still waiting."""
+    items = []
+    for part in q.split(",")[:80]:
+        bits = part.split("|")
+        if len(bits) == 3 and ID.match(bits[0]) and ID.match(bits[1]) and bits[2].isdigit() and bits[0].startswith("team:"):
+            items.append((bits[0], bits[1], int(bits[2])))
+    if config.ART_MODE == "remote":
+        return JSONResponse({"items": {}, "pending": 0}, headers={"Cache-Control": "no-store"})
+    found, pending = S.fix.ask(items)
+    return JSONResponse({"items": found, "pending": pending}, headers={"Cache-Control": "no-store"})
 
 
 @route("POST", "/api/art/gaps")

@@ -375,7 +375,7 @@ function programmeSections(d, list, allow, open) {
 function programmeRow(ev) {
   const now = Date.now() / 1000;
   const top = h('div', { class: 'prog-head' });
-  if (ev.when === 'live') top.append(h('span', { class: 'live-pill', text: 'Live' }));
+  if (ev.when === 'live') top.append(h('span', { class: `live-pill ${ev.replay ? 'replay' : ''}`, text: ev.replay ? 'Replay' : 'Live' }));
   else top.append(h('span', { class: `when ${ev.when}`, text: whenText(ev.start, now) }));
   top.append(h('strong', { class: `prog-title ${isFavEvent(ev.fav_ids) ? 'is-fav' : ''}`, text: ev.title }));
   const rows = [top, h('div', { class: 'prog-time' }, `${fmtClock(ev.start)}–${fmtClock(ev.stop)}`,
@@ -754,6 +754,41 @@ async function loadArt(ids, labels = []) {
   return found;
 }
 
+// Live or replay, from the real fixture dates (the Pi's tvnext/fixtures.py): many channels re-air a
+// match days later with nothing in the guide to say so. "home|away|start" -> {live} | {replay, played};
+// asked for today's football with two known teams, answered from the Pi's cache, the rest looked up
+// in the background (another paint picks them up).
+const fixtureIdx = new Map();
+const fixtureAsked = new Map();
+const fxKey = (ev) => (ev.sport === 'football' && (ev.teams || []).length === 2 && ev.teams.every((t) => String(t).startsWith('team:'))
+  ? `${ev.teams[0]}|${ev.teams[1]}|${ev.start}` : '');
+async function loadFixtures(evs) {
+  const now = Date.now();
+  const rank = { live: 0, soon: 1, later: 2 };
+  const want = [...new Set(evs.filter((e) => e.when in rank).sort((a, b) => rank[a.when] - rank[b.when]).map(fxKey))]
+    .filter((k) => k && !fixtureIdx.has(k) && now - (fixtureAsked.get(k) || 0) > 20000);
+  let found = false;
+  let pending = 0;
+  for (let i = 0; i < want.length; i += 80) {
+    const part = want.slice(i, i + 80);
+    for (const k of part) fixtureAsked.set(k, now);
+    try {
+      const res = await fetch(`${NEXT}/api/fixtures?${new URLSearchParams({ q: part.join(',') })}`, { credentials: 'same-origin' });
+      const d = res.ok ? await res.json() : { items: {}, pending: 0 };
+      for (const [k, v] of Object.entries(d.items || {})) { fixtureIdx.set(k, v); found = true; }
+      pending = d.pending || 0;
+    } catch { return { found, pending: 0 }; }      // no sidecar: the guide's own reading stands
+  }
+  return { found, pending };
+}
+function withFixture(ev) {
+  const v = fixtureIdx.get(fxKey(ev));
+  if (!v) return ev;
+  return v.replay ? { ...ev, replay: true, played: v.played } : { ...ev, replay: false, played: 0 };
+}
+const playedOn = (ts) => new Date(ts * 1000).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+const replayTag = (ev) => h('span', { class: 'sp-tag replay', text: ev.played ? `Replay · played ${playedOn(ev.played)}` : 'Replay' });
+
 // Artwork gaps: every generated crest / competition mark drawn because the Pi had no verified artwork
 // is reported once per entity + place per page load; the Pi keeps one record per entity (first/last
 // seen, count, places, competitions, why) - `iptv artwork missing` and Settings > Artwork read it.
@@ -950,16 +985,20 @@ async function viewSports() {
     paintChips();
     const foryou = pick.sport === 'foryou';
     if (foryou && !mine) { reload(); return; }
-    const evs = visible(foryou ? mine.events : data.events);
+    const evs = visible(foryou ? mine.events : data.events).map(withFixture);
     const secs = foryou ? [['live', 'Live now'], ['soon', 'Starting soon'], ['later', 'Later today'], ['tomorrow', 'Tomorrow']]
       : pick.day === 'today' ? [['live', 'Live now'], ['soon', 'Starting soon'], ['later', 'Later today']] : [['all', 'Tomorrow']];
     const out = [];
     for (const [when, title] of secs) {
-      const items = evs.filter((e) => when === 'all' || (foryou ? (when === 'tomorrow' ? e.day === 'tomorrow' : e.day === 'today' && e.when === when) : e.when === when));
+      const items = evs.filter((e) => !e.replay && (when === 'all' || (foryou ? (when === 'tomorrow' ? e.day === 'tomorrow' : e.day === 'today' && e.when === when) : e.when === when)));
       if (!items.length) continue;
       if (when !== 'live') items.sort((a, b) => a.start - b.start || b.score - a.score);
       out.push(when === 'live' ? liveBlock(title, items) : boardBlock(title, items));
     }
+    // replays apart, after everything live or still to come: the ones on now first
+    const nowS = Date.now() / 1000;
+    const replays = evs.filter((e) => e.replay).sort((a, b) => (b.start <= nowS) - (a.start <= nowS) || a.start - b.start);
+    if (replays.length) out.push(boardBlock('Replays', replays));
     if (!out.length && foryou) {
       const has = store.sportsFavs.ids().length;
       const add = h('button', { class: 'btn primary', type: 'button', onclick: () => openSportsFavs() }, icon('star'), 'Choose teams');
@@ -976,7 +1015,13 @@ async function viewSports() {
     const ids = evs.flatMap((e) => [e.comp_id, ...(e.sport === 'football' ? e.teams || [] : [])]);
     const labels = evs.flatMap((e) => (e.sport === 'football' && names.teams(e.title)) || []);   // every side: exact per name
     loadArt(ids, labels).then((found) => { if (found && state.section === 'sports') paint(); });
+    loadFixtures(foryou ? mine.events : data.events).then(({ found, pending }) => {
+      if (state.section !== 'sports') return;
+      if (found) paint();
+      else if (pending && !fixtureWait) fixtureWait = setTimeout(() => { fixtureWait = 0; if (state.section === 'sports') paint(); }, 15000);
+    });
   }
+  let fixtureWait = 0;
 
   const blockHead = (title, n) => h('div', { class: 'sp-block-head' }, h('h2', { class: 'section-title', text: title }), h('span', { class: 'n', text: String(n) }));
 
@@ -1142,8 +1187,8 @@ async function viewSports() {
     const [star, favRow] = favControl(ev, li);
     const meta = [ev.comp, ['all', 'foryou'].includes(pick.sport) || !ev.comp ? SPORT_NAMES[ev.sport] : ''].filter(Boolean).join(' · ');
     const where = `sports:${size || 'compact'}`;
-    const top = h('div', { class: 'fx-top' }, h('span', { class: 'live-pill', text: 'Live' }), compLabel(ev, meta || SPORT_NAMES[ev.sport] || 'Sport', where),
-      ev.replay ? h('span', { class: 'sp-tag', text: 'Replay' }) : null, ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, star);
+    const top = h('div', { class: 'fx-top' }, h('span', { class: `live-pill ${ev.replay ? 'replay' : ''}`, text: ev.replay ? 'Replay' : 'Live' }),
+      compLabel(ev, meta || SPORT_NAMES[ev.sport] || 'Sport', where), ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, star);
     const sides = teamSides(ev);
     const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.id, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }), capsSpan(t.label))))
       : h('div', { class: 'fx-title' }, capsSpan(ev.title));
@@ -1174,8 +1219,9 @@ async function viewSports() {
     const li = h('li', { class: `dep ${isFavEvent(ids) ? 'is-fav' : ''}` });
     li.style.setProperty('--c2', art.compArt(ev.comp_id, ev.sport).c2);
     const soon = ev.start - now <= 3600 && ev.start > now;
-    const time = h('div', { class: 'dep-time' }, h('b', { text: fmtClock(ev.start) }),
-      soon ? h('span', { class: 'when soon', text: whenText(ev.start, now) }) : null);
+    const onNow = ev.start <= now && now < ev.stop;
+    const time = h('div', { class: 'dep-time' }, h('b', { text: onNow ? 'Now' : fmtClock(ev.start) }),
+      onNow ? h('span', { class: 'when', text: minsLeft(ev.stop, now) }) : soon ? h('span', { class: 'when soon', text: whenText(ev.start, now) }) : null);
     const meta = [ev.comp, ['all', 'foryou'].includes(pick.sport) || !ev.comp ? SPORT_NAMES[ev.sport] : ''].filter(Boolean).join(' · ');
     const sides = teamSides(ev);
     const title = h('span', { class: `dep-title ${isFavEvent(ids) ? 'is-fav' : ''}` });
@@ -1186,7 +1232,7 @@ async function viewSports() {
     const mainBtn = h('button', { class: 'dep-main', type: 'button', 'aria-label': `${ev.title}, ${fmtClock(ev.start)}, on ${best.ch.name}` },
       title, h('span', { class: 'dep-meta' }, hasArt(ev.comp_id) ? h('img', { class: 'comp-logo', src: artUrl(ev.comp_id, 64), alt: '', decoding: 'async' })
         : (artNone(ev.comp_id) && noteGap(ev.comp_id, ev.comp, 'sports:board'), null),
-        h('span', { text: meta }), ev.replay ? h('span', { class: 'sp-tag', text: 'Replay' }) : null,
+        h('span', { text: meta }), ev.replay ? replayTag(ev) : null,
         ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, feedNote(ev, true)));
     mainBtn.addEventListener('click', () => playChannel(best.ch));
     const [star, favRow] = favControl(ev, li);

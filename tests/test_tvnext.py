@@ -7,6 +7,7 @@ import os
 import tempfile
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -18,7 +19,7 @@ except ImportError:                     # the app's own venv: the sidecar's (req
 os.environ.setdefault("TVN_STATE", tempfile.mkdtemp())
 os.environ.setdefault("TVN_CACHE", tempfile.mkdtemp())
 
-from tvnext import config, images, sportsart  # noqa: E402
+from tvnext import config, fixtures, images, sportsart  # noqa: E402
 
 ENTS = sportsart.entities()
 
@@ -512,6 +513,57 @@ class GapRegistry(unittest.TestCase):
         text = sportsart.format_missing(r)
         self.assertIn("Coverage: teams 0/", text)
         self.assertIn("5x  comp:uefa-youth-league", text)
+
+
+class Fixtures(unittest.TestCase):
+    """Live or replay from the real fixture date (a regional channel re-airing Saturday's game on
+    Thursday, titled exactly like the live one)."""
+    START = 1792076400                                    # Thu 15 Oct 2026 16:00 BST
+
+    def test_verdict(self):
+        v, S = fixtures.verdict, self.START
+        self.assertEqual(v([S + 15 * 60], S), {"live": True}, "kick-off a quarter of an hour into the airing")
+        self.assertEqual(v([S - 20 * 60], S), {"live": True}, "joined just after kick-off")
+        sat = S - 5 * 86400 + 6 * 3600 - 2 * 3600         # Sat 10 Oct, 15:00 BST
+        self.assertEqual(v([sat], S), {"replay": True, "played": sat})
+        self.assertIsNone(v([S - 60 * 60], S), "an hour after kick-off: delayed, not certainly a replay")
+        self.assertIsNone(v([S + 2 * 86400], S), "only a future fixture: no verdict")
+        self.assertIsNone(v([S - 30 * 86400], S), "a meeting a month ago says nothing about today")
+        self.assertIsNone(v([], S))
+        self.assertEqual(v([sat, S + 10 * 60], S), {"live": True}, "the real one today wins")
+
+    def test_ask_queues_then_answers_from_cache(self):
+        class Src:
+            def __init__(self):
+                self.asked = []
+
+            async def api(self, path):
+                self.asked.append(path)
+                if "Aston_Villa_vs_Brentford" in path:
+                    return {"event": [{"strSport": "Soccer", "strTimestamp": "2026-10-10T14:00:00"}]}
+                return {"event": None}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lib = sportsart.Library(Path(tmp) / "art")
+            src = Src()
+            fx = fixtures.Fixtures(lib, src, Path(tmp) / "fixtures.json")
+            item = ("team:aston-villa", "team:brentford", self.START)
+            self.assertEqual(fx.ask([item]), ({}, 1), "nothing known yet: queued")
+            self.assertEqual(fx.ask([item]), ({}, 1), "asked twice, queued once")
+
+            async def work():
+                task = asyncio.create_task(fx.run())
+                while fx.q.qsize() or fx.queued:
+                    await asyncio.sleep(0.01)
+                task.cancel()
+            asyncio.run(work())
+            self.assertTrue(any("Aston_Villa_vs_Brentford" in a for a in src.asked), src.asked)
+            found, pending = fx.ask([item])
+            sat = int(datetime(2026, 10, 10, 14, 0, tzinfo=timezone.utc).timestamp())
+            self.assertEqual(found, {"team:aston-villa|team:brentford|1792076400": {"replay": True, "played": sat}})
+            self.assertEqual(pending, 0)
+            again = fixtures.Fixtures(lib, src, Path(tmp) / "fixtures.json")       # kept across restarts
+            self.assertIn("team:aston-villa|team:brentford|1792076400", again.ask([item])[0])
 
 
 if __name__ == "__main__":
