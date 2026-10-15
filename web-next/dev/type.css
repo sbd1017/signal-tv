@@ -1,0 +1,12 @@
+/* layout for dev/type.html only */
+.tc { max-width: 1100px; margin: 0 auto; padding: 32px; display: grid; gap: 22px; }
+.tc-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 24px; align-items: center; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.tc-k { font: 600 12px var(--f-text); color: var(--faint); letter-spacing: .04em; }
+.tc-top { display: flex; align-items: center; gap: 40px; }
+.tc-fx { display: grid; gap: 10px; }
+.tc-fx .fx-team { font-size: 34px; }
+.tc-fx .crest { width: 44px; height: 44px; --a: #DC052D; --b: #fff; }
+.tc-fx .fx-team:nth-child(2) .crest { --a: #f2e400; --b: #111; }
+.tc-fx .tc-s { font-size: 24px; }
+.tc-num { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; }
+.tc .head { margin: 0; }

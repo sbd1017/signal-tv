@@ -1,0 +1,71 @@
+{
+ "comp:saudi-pro-league": {
+  "source": "thesportsdb",
+  "id": "4668",
+  "note": "the source names it 'Saudi-Arabian Pro League' (checked 2026-10-13)"
+ },
+ "team:ajax": {
+  "source": "thesportsdb",
+  "id": "133772",
+  "note": "search 'Ajax' returns 'AFC Ajax Amateurs'; 133772 = Ajax, Dutch Eredivisie, men (checked 2026-10-13)"
+ },
+ "team:as-monaco": {
+  "source": "thesportsdb",
+  "id": "133823",
+  "note": "search returns AS Monaco basketball; 133823 = Monaco, French Ligue 1 (source country: Monaco) (checked 2026-10-13)"
+ },
+ "team:fc-porto": {
+  "source": "thesportsdb",
+  "id": "134114",
+  "note": "search returns FC Porto volleyball; 134114 = Porto, Portuguese Primeira Liga (checked 2026-10-13)"
+ },
+ "team:lille": {
+  "source": "thesportsdb",
+  "id": "133711",
+  "note": "no result for 'Lille'/'LOSC Lille'; 133711 = Lille, French Ligue 1 (checked 2026-10-13)"
+ },
+ "team:nottingham-forest": {
+  "source": "thesportsdb",
+  "id": "133720",
+  "note": "search returns Nottingham Forest netball; 133720 = Nottingham Forest, English Premier League (checked 2026-10-13)"
+ },
+ "team:al-hilal": {
+  "source": "thesportsdb",
+  "id": "136013",
+  "note": "search 'Al Hilal' returns Al Hilal Wau (South Sudan); 136013 = Al-Hilal, Saudi-Arabian Pro League (checked 2026-10-13)"
+ },
+ "team:al-ahli-saudi": {
+  "source": "thesportsdb",
+  "id": "137721",
+  "note": "source name 'Al-Ahli'; 137721 = Al-Ahli, Saudi-Arabian Pro League (checked 2026-10-13)"
+ },
+ "team:bosnia-and-herzegovina": {
+  "source": "thesportsdb",
+  "id": "134510",
+  "note": "found as 'Bosnia-Herzegovina', national team (checked 2026-10-13)"
+ },
+ "team:west-indies": {
+  "none": true,
+  "note": "a cricket side; the library only holds football crests for national teams"
+ },
+ "team:sabah": {
+  "source": "espn",
+  "league": "soccer/uefa.champions",
+  "id": "21922",
+  "note": "ESPN 'Sabah FK' (21922), listed in the UEFA Champions League; crest dated 2017 = Sabah FK, Baku (Sabah FC of Malaysia: 1963). Its ESPN home league is the Champions League itself, so the automatic country check can't pass (checked 2026-10-13)"
+ },
+ "team:nea-salamina": {
+  "source": "thesportsdb",
+  "id": "137926",
+  "note": "source name 'Nea Salamis Famagusta' (alternates Νέα Σαλαμίνα Αμμοχώστου, Nea Salamis), Cypriot First Division, founded 1948 (checked 2026-10-13)"
+ },
+ "team:shabab-al-ahli": {
+  "source": "thesportsdb",
+  "id": "137828",
+  "note": "source name 'Shabab Al-Ahli Dubai', UAE Pro League, Rashid Stadium, crest dated 1958 (checked 2026-10-13)"
+ },
+ "comp:world-cup-qualifiers": {
+  "none": true,
+  "note": "one entry for six confederations' qualifiers, each with its own mark: no single logo is right (decided 2026-10-13)"
+ }
+}

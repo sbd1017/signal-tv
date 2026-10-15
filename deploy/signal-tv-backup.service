@@ -1,0 +1,28 @@
+# /etc/systemd/system/signal-tv-backup.service - see tvapp/backup.py for what is (not) included.
+# Started daily by signal-tv-backup.timer, and by `iptv backup`.
+[Unit]
+Description=Signal TV backup (user state, config, code) to /var/backups/signal-tv
+After=signal-tv.service
+# then copy the user-state part (no secrets) to Google Drive
+OnSuccess=signal-tv-backup-upload.service signal-tv-alert@ok:%n.service
+# Telegram alert if it fails (tvapp/alerts.py)
+OnFailure=signal-tv-alert@failed:%n.service
+
+[Service]
+Type=oneshot
+User=signal-tv
+Group=signal-tv
+WorkingDirectory=/opt/signal-tv
+Environment=PYTHONDONTWRITEBYTECODE=1
+# 1) consistent copy of the state database, as the user that owns it (keeps 14)
+ExecStart=/opt/signal-tv/venv/bin/python -m tvapp.backup --state-snapshot --keep 14
+# 2) archive incl. tv.env, units, nginx files, git bundle; root to read those (keeps 30)
+ExecStart=+/opt/signal-tv/venv/bin/python -m tvapp.backup --keep 30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/signal-tv
+IPAddressDeny=any

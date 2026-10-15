@@ -1,0 +1,55 @@
+[Unit]
+Description=Signal TV next: image derivatives + sports artwork for the /tv-test preview (127.0.0.1:8792)
+After=network-online.target signal-tv.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# its own throwaway user: it can't read the live app's state, and the live app can't be affected by it
+DynamicUser=yes
+WorkingDirectory=/opt/signal-tv-next
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+Environment=TVN_HOST=127.0.0.1 TVN_PORT=8792 TVN_BACKEND=http://127.0.0.1:8790
+Environment=TVN_STATE=/var/lib/signal-tv-next TVN_CACHE=/var/cache/signal-tv-next
+Environment=TVN_ART_MODE=cached TVN_IMG_CACHE_MAX_MB=1500 TVN_RESIZE_WORKERS=2
+# your site or email: sent with artwork lookups (Wikimedia asks every client for a contact)
+Environment=TVN_ART_CONTACT=https://example.com
+ExecStart=/opt/signal-tv-next/venv/bin/python -m tvnext
+Restart=on-failure
+RestartSec=5
+StateDirectory=signal-tv-next
+StateDirectoryMode=0750
+CacheDirectory=signal-tv-next
+CacheDirectoryMode=0750
+UMask=0027
+MemoryMax=512M
+TasksMax=64
+# below the live app: resizing waits rather than slowing a stream
+CPUWeight=40
+Nice=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=signal-tv-next
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
