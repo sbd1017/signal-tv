@@ -316,6 +316,14 @@ class GreekSides(unittest.TestCase):
             self.assertEqual(sports.resolve_side(side)[1], key, side)
         self.assertEqual(sports.resolve_side("Kiel")[0], -1, "THW Kiel plays handball: no football crest for a bare Kiel")
 
+    def test_multi_sport_clubs(self):
+        """EuroLeague clubs that are also football clubs count in basketball; other clubs don't."""
+        b = sports.BY_KEY["basketball"]
+        info = sports.classify("Basketball: Φενέρμπαχτσε vs Παρτίζαν", "", b)
+        self.assertEqual(info.key, sports.classify("EuroLeague: Fenerbahce vs Partizan", "", b).key, "one card")
+        self.assertEqual([sports.ENTITIES[t].key for t in info.teams], ["team:fenerbahce", "team:partizan"])
+        self.assertEqual(sports.classify("NBA: Spurs vs Lakers", "", b).teams, (-1, -1), "Spurs are not Tottenham")
+
 
 if __name__ == "__main__":
     unittest.main()

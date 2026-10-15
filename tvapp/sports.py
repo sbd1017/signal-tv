@@ -101,8 +101,8 @@ team:celtic = Celtic
 team:rangers = Rangers ; weak: Glasgow Rangers
 team:aberdeen = Aberdeen
 team:heart-of-midlothian = Heart of Midlothian | Hearts
-team:real-madrid = Real Madrid | Real Madryt
-team:barcelona = Barcelona | FC Barcelona | Barca | Μπαρτσελόνα ; weak: Barcelone | Barcelonne | Barca FC
+team:real-madrid = Real Madrid | Real Madryt ; also: basketball
+team:barcelona = Barcelona | FC Barcelona | Barca | Μπαρτσελόνα ; weak: Barcelone | Barcelonne | Barca FC ; also: basketball
 team:atletico-madrid = Atlético Madrid | Atletico de Madrid | Atleti | Ατλέτικο Μαδρίτης ; weak: Atletico | A Madrid | Atl Madrid | Atletico Madryt
 team:athletic-club = Athletic Club | Athletic Bilbao ; weak: Bilbao | Athletic
 team:real-sociedad = Real Sociedad
@@ -136,7 +136,7 @@ team:sassuolo = Sassuolo
 team:parma = Parma | Πάρμα
 team:lecce = Lecce
 team:monza = Monza | Μόντσα
-team:bayern-munich = Bayern Munich | Bayern München | Bayern Munchen | Bayern Muenchen | FC Bayern | FC Bayern Munchen | Bayern Monachium | Μπάγερν Μονάχου ; weak: Bayern
+team:bayern-munich = Bayern Munich | Bayern München | Bayern Munchen | Bayern Muenchen | FC Bayern | FC Bayern Munchen | Bayern Monachium | Μπάγερν Μονάχου ; weak: Bayern ; also: basketball
 team:borussia-dortmund = Borussia Dortmund | BVB ; weak: Dortmund
 team:bayer-leverkusen = Bayer Leverkusen | Leverkusen | Bayer 04 Leverkusen
 team:rb-leipzig = RB Leipzig | RB Lipsk | Λειψία ; weak: Leipzig
@@ -151,7 +151,7 @@ team:hamburger-sv = Hamburger SV | Hamburg SV ; weak: Hamburg | HSV
 team:paris-saint-germain = Paris Saint-Germain | Paris St Germain | Paris St-Germain | Paris SG | PSG
 team:marseille = Marseille | Olympique de Marseille | Olympique Marsylia | Olympique Marseille ; weak: OM
 team:lyon = Lyon | Olympique Lyonnais ; weak: OL
-team:as-monaco = AS Monaco ; weak: Monaco
+team:as-monaco = AS Monaco ; weak: Monaco ; also: basketball
 team:lille = Lille | LOSC Lille ; weak: LOSC | Λιλ
 team:ogc-nice = OGC Nice ; weak: Nice
 team:rc-lens = RC Lens ; weak: Lens | Λανς
@@ -164,8 +164,8 @@ team:ajax = Ajax | AFC Ajax | Ajax Amsterdam | AFC Ajax Amsterdam
 team:psv-eindhoven = PSV Eindhoven | PSV | PSV Αϊντχόφεν
 team:feyenoord = Feyenoord
 team:az-alkmaar = AZ Alkmaar ; weak: AZ
-team:galatasaray = Galatasaray | Γαλατασαράι
-team:fenerbahce = Fenerbahçe | Fenerbahce Istanbul | Fenerbahçe Beko | Fenerbahce Beko
+team:galatasaray = Galatasaray | Γαλατασαράι ; also: basketball
+team:fenerbahce = Fenerbahçe | Fenerbahce Istanbul | Fenerbahçe Beko | Fenerbahce Beko ; also: basketball
 team:besiktas = Beşiktaş | Besiktas JK | Besiktas AS
 team:trabzonspor = Trabzonspor
 team:club-brugge = Club Brugge | Club Brugge KV | Κλαμπ Μπριζ ; weak: Brugge | Club Brugges
@@ -173,9 +173,9 @@ team:anderlecht = Anderlecht | RSC Anderlecht
 team:red-bull-salzburg = Red Bull Salzburg | RB Salzburg | Red Bull Saltzburg | Saltzburg ; weak: Salzburg
 team:shakhtar-donetsk = Shakhtar Donetsk ; weak: Shakhtar
 team:dinamo-zagreb = Dinamo Zagreb ; weak: GNK Dinamo
-team:red-star-belgrade = Red Star Belgrade | Crvena Zvezda
-team:olympiacos = Olympiacos | Olympiakos | Olympiakos SFP | Ολυμπιακός | Olympiakos Piraeus | Olympiacos Piraeus | Olympiakos Pireus
-team:panathinaikos = Panathinaikos | Panathinaikos Athens | Panathinaikos OPAP Athens | Panathinaikos AKTOR Athens
+team:red-star-belgrade = Red Star Belgrade | Crvena Zvezda ; also: basketball
+team:olympiacos = Olympiacos | Olympiakos | Olympiakos SFP | Ολυμπιακός | Olympiakos Piraeus | Olympiacos Piraeus | Olympiakos Pireus ; also: basketball
+team:panathinaikos = Panathinaikos | Panathinaikos Athens | Panathinaikos OPAP Athens | Panathinaikos AKTOR Athens ; also: basketball
 team:al-hilal = Al Hilal
 team:al-nassr = Al Nassr
 team:al-ittihad = Al Ittihad
@@ -248,7 +248,7 @@ team:widzew-lodz = Widzew Łódź | Widzew Lodz
 team:zaglebie-lubin = Zagłębie Lubin | Zaglebie Lubin | KGHM Zagłębie Lubin ; weak: Zaglebie | Zagłębie
 team:motor-lublin = Motor Lublin
 team:jagiellonia-bialystok = Jagiellonia Białystok | Jagiellonia Bialystok ; weak: Jagiellonia
-team:paok = PAOK | PAOK FC | ΠΑΟΚ
+team:paok = PAOK | PAOK FC | ΠΑΟΚ ; also: basketball
 team:ofi-crete = OFI Crete | OFI Kreta ; weak: OFI
 team:kalamata = Kalamata FC | Καλαμάτα ; weak: Kalamata
 team:apoel = APOEL | APOEL Nicosia | ΑΠΟΕΛ
@@ -280,7 +280,7 @@ team:sturm-graz = SK Sturm Graz | Sturm Graz ; weak: Sturm
 team:union-saint-gilloise = Union Saint-Gilloise | Royale Union Saint-Gilloise | Union SG | St Gilloise | St Gilloisse | Ουνιόν Σεν-Ζιλουάζ
 team:torreense = SCU Torreense | Torreense | Torrense
 team:kups = KuPS | Kuopion Palloseura
-team:partizan = Partizan | Partizan Belgrade | Partizan Belgrad | FK Partizan | KK Partizan | Partizan Mozzart Bet Belgrade | Παρτίζαν
+team:partizan = Partizan | Partizan Belgrade | Partizan Belgrad | FK Partizan | KK Partizan | Partizan Mozzart Bet Belgrade | Παρτίζαν ; also: basketball
 team:omonia-nicosia = Omonia Nicosia | AC Omonia | Omonia | Ομόνοια
 team:pafos = Pafos FC | Pafos | Πάφος
 team:kauno-zalgiris = Kauno Žalgiris | Kauno Zalgiris | Κάουνο Ζαλγκίρις
@@ -317,8 +317,8 @@ team:rodez = Rodez AF | Rodez
 team:kashiwa-reysol = Kashiwa Reysol
 team:al-jazira = Al Jazira | Al-Jazira
 team:ararat-armenia = Ararat-Armenia | Ararat Armenia
-team:aris-thessaloniki = Aris Thessaloniki | Aris Salonika ; weak: Aris | Άρης
-team:aek-athens = AEK Athens | ΑΕΚ ; weak: AEK
+team:aris-thessaloniki = Aris Thessaloniki | Aris Salonika ; weak: Aris | Άρης ; also: basketball
+team:aek-athens = AEK Athens | ΑΕΚ ; weak: AEK ; also: basketball
 team:sudtirol = FC Südtirol | Südtirol | Sudtirol | Σουντιρόλ
 
 @club basketball
@@ -326,13 +326,13 @@ team:anadolu-efes = Anadolu Efes | Anadolu Efes Istanbul ; weak: Efes
 team:virtus-bologna = Virtus Bologna | Virtus Segafredo Bologna | Βίρτους Μπολόνια
 team:olimpia-milano = Olimpia Milano | EA7 Emporio Armani Milano | Emporio Armani Milano | Armani Milano | AX Armani Exchange Milano | Αρμάνι Μιλάνο ; weak: Armani
 team:baskonia = Baskonia | Saski Baskonia | Baskonia Vitoria-Gasteiz
-team:maccabi-tel-aviv = Maccabi Tel Aviv | Maccabi Playtika Tel Aviv ; weak: Maccabi
+team:maccabi-tel-aviv = Maccabi Tel Aviv | Maccabi Playtika Tel Aviv ; weak: Maccabi ; also: football
 team:valencia-basket = Valencia Basket
 team:asvel = LDLC ASVEL | ASVEL | ASVEL Villeurbanne | Villeurbanne | Βιλερμπάν
 team:zalgiris-kaunas = Žalgiris Kaunas | Zalgiris Kaunas | BC Žalgiris ; weak: Žalgiris | Zalgiris
 team:dubai-basketball = Dubai Basketball | Dubai BC | Ντουμπάι ; weak: Dubai
 team:paris-basketball = Paris Basketball | Paris Basket
-team:hapoel-tel-aviv = Hapoel Tel Aviv | Hapoel IBI Tel Aviv
+team:hapoel-tel-aviv = Hapoel Tel Aviv | Hapoel IBI Tel Aviv ; also: football
 team:manresa = BAXI Manresa | Bàsquet Manresa | Manresa | Μανρέσα
 team:derthona = Bertram Derthona | Derthona Tortona | Derthona Basket | Ντερτόνα
 team:buducnost = Budućnost | Buducnost | KK Budućnost | Budućnost VOLI
@@ -597,11 +597,12 @@ def _phrases(text: str) -> list[str]:
 
 
 class Entity:
-    __slots__ = ("id", "key", "kind", "sport", "name", "names", "weak", "not_after", "not_before", "priority", "was")
+    __slots__ = ("id", "key", "kind", "sport", "name", "names", "weak", "not_after", "not_before", "priority", "was", "also")
 
     def __init__(self, eid: int, key: str, kind: str, sport: int, name: str):
         self.id, self.key, self.kind, self.sport, self.name = eid, key, kind, sport, name
         self.was: list[str] = []
+        self.also: set[int] = set()            # other sports this club plays under the same name (EuroLeague clubs)
         self.names: list[str] = []
         self.weak: list[str] = []
         self.not_after: set[str] = set()
@@ -640,6 +641,8 @@ def _load(data: str) -> list[Entity]:
                 e.priority = int(val)
             elif name == "was":
                 e.was = val.split()
+            elif name == "also":
+                e.also = {BY_KEY[x] for x in val.split()}
         out.append(e)
     return out
 
@@ -697,6 +700,11 @@ GREEK_NAMES = {
 }
 
 ENTITIES = _load(DATA)
+
+
+def in_sport(e: Entity, sport: int) -> bool:
+    """Is this entity itself in that sport? A club only in its own (and its "also:" ones)."""
+    return e.sport in (0, sport) or sport in e.also
 BY_ID_KEY: dict[str, Entity] = {}          # stable id (and old ids) -> entity: what favourites resolve through
 for _e in ENTITIES:
     for _k in (_e.key, *_e.was):
@@ -1065,7 +1073,7 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
     if info.explicit:
         # "NBA: Spurs v Lakers" is not Tottenham: a club is that club only in its own sport. (The
         # event key keeps the names, so the same game listed without a sport word still merges.)
-        teams = tuple(t if t < 0 or ENTITIES[t].sport in (0, info.sport) else -1 for t in teams)
+        teams = tuple(t if t < 0 or in_sport(ENTITIES[t], info.sport) else -1 for t in teams)
     info.teams = teams
     if comp and any(w in YOUTH_WORDS for w in comp.names[0].split()):
         info.youth = True                            # "Leipzig v PSV", description "UEFA Youth League"
@@ -1117,7 +1125,7 @@ def display_title(info: Info, title: str) -> str:
 
     def side(e: int, raw: str) -> str:
         # a club's name only in its own sport: basketball's "Valencia" isn't Valencia CF
-        if e >= 0 and (ENTITIES[e].sport in (0, info.sport) or not info.explicit):
+        if e >= 0 and (in_sport(ENTITIES[e], info.sport) or not info.explicit):
             return ENTITIES[e].name
         return _tidy(raw) or (ENTITIES[e].name if e >= 0 else "")
     left, right = side(a, info.names[0]), side(b, info.names[1])
