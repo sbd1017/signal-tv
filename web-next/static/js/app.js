@@ -720,19 +720,28 @@ const artAsked = new Map();               // id -> when asked
 // Team names the live app sent without an id (a club it doesn't know yet): the Pi resolves them with
 // this build's own dataset. name -> canonical id | null (asked; not a known team)
 const nameIdx = new Map();
-async function loadArt(ids, labels = []) {
+// Sides the dataset doesn't know at all (a fighter, an unlisted club): the Pi looks the exact name up
+// in that sport (tvnext sportsart guests). "sport|label" -> guest id | null (not looked up)
+const guestIdx = new Map();
+const GUEST_SPORTS = new Set(['football', 'basketball', 'nfl', 'mma', 'boxing', 'rugby', 'hockey', 'handball', 'volleyball']);
+async function loadArt(ids, labels = [], guests = []) {
   const now = Date.now();
-  const want = [...new Set(ids)].filter((id) => id && (!artAsked.has(id) || (artIdx.get(id) === null && now - artAsked.get(id) > 120000)));
+  const gw = [...new Set(guests)].filter((g) => !guestIdx.has(g)).slice(0, 600);
+  for (const g of gw) guestIdx.set(g, null);
+  const gids = [...guestIdx.values()].filter(Boolean);
+  const want = [...new Set([...ids, ...gids])].filter((id) => id && (!artAsked.has(id) || (artIdx.get(id) === null && now - artAsked.get(id) > 120000)));
   const names = [...new Set(labels)].filter((n) => n && !nameIdx.has(n)).slice(0, 600);
-  if (!want.length && !names.length) return false;
+  if (!want.length && !names.length && !gw.length) return false;
   for (const id of want) artAsked.set(id, now);
   let found = false;
-  const rounds = Math.max(Math.ceil(want.length / 200), Math.ceil(names.length / 100), 1);
+  const rounds = Math.max(Math.ceil(want.length / 200), Math.ceil(names.length / 100), Math.ceil(gw.length / 100), 1);
   for (let r = 0; r < rounds; r++) {
     const part = want.slice(r * 200, r * 200 + 200);
     const namepart = names.slice(r * 100, r * 100 + 100);
+    const gpart = gw.slice(r * 100, r * 100 + 100);
     const q = new URLSearchParams({ ids: part.join(',') });
     if (namepart.length) q.set('names', namepart.join('\n'));
+    if (gpart.length) q.set('guests', gpart.join('\n'));
     try {
       const res = await fetch(`${NEXT}/api/art?${q}`, { credentials: 'same-origin' });
       const d = res.ok ? await res.json() : { items: {}, names: {} };
@@ -740,6 +749,14 @@ async function loadArt(ids, labels = []) {
         const was = artIdx.get(id);
         artIdx.set(id, d.items[id] || null);
         if (d.items[id] && !was) found = true;
+      }
+      for (const g of gpart) {
+        const id = (d.guests || {})[g] || null;
+        guestIdx.set(g, id);
+        if (!id) continue;
+        artAsked.set(id, now);
+        artIdx.set(id, d.items[id] || null);
+        if (d.items[id]) found = true;
       }
       for (const n of namepart) {
         const id = (d.names || {})[n] || null;
@@ -820,7 +837,7 @@ function sendGaps() {
 }
 // asked and answered "none" - before the answer a missing crest isn't a gap yet
 const artNone = (id) => !!id && artIdx.has(id) && artIdx.get(id) === null;
-const artUrl = (id, size) => `${NEXT}/art/${id.startsWith('comp:') ? 'competitions' : 'teams'}/${id.split(':')[1]}/${size}.webp?v=${artIdx.get(id).v}`;
+const artUrl = (id, size) => `${NEXT}/art/${id.startsWith('comp:') ? 'competitions' : id.startsWith('guest:') ? 'guests' : 'teams'}/${id.split(':')[1]}/${size}.webp?v=${artIdx.get(id).v}`;
 const hasArt = (id) => !!(id && artIdx.get(id));
 
 // ------------------------------------------------------------------ SPORTS: matchday
@@ -830,6 +847,7 @@ const SPORTS = [['football', 'Football'], ['all', 'All sports'], ['f1', 'F1'], [
   ['basketball', 'Basketball'], ['nfl', 'NFL'], ['tennis', 'Tennis'], ['cricket', 'Cricket'], ['rugby', 'Rugby']];
 const SPORT_NAMES = Object.fromEntries([...SPORTS, ['hockey', 'Ice hockey'], ['handball', 'Handball'],
   ['volleyball', 'Volleyball'], ['other', 'Other']]);
+SPORT_NAMES.nfl = 'American football';                     // the chip says NFL; a card without a competition may be college
 const sportsCache = new Map();
 
 async function sportsData(day, force = false) {
@@ -1031,7 +1049,10 @@ async function viewSports() {
     list.replaceChildren(...(jump ? [jump] : []), ...out);
     const ids = evs.flatMap((e) => [e.comp_id, ...(e.teams || [])]);
     const labels = evs.flatMap((e) => names.teams(e.title) || []);   // every side: exact per name
-    loadArt(ids, labels).then((found) => { if (found && state.section === 'sports') paint(); });
+    // and every side with no id, by its name in its sport (the Pi skips the ones it knows)
+    const guests = evs.flatMap((e) => (GUEST_SPORTS.has(e.sport) && e.kind === 'match' && (e.teams || []).length < 2
+      ? (names.teams(e.title) || []).map((l) => `${e.sport}|${l}`) : []));
+    loadArt(ids, labels, guests).then((found) => { if (found && state.section === 'sports') paint(); });
     shownLive = evs.filter((e) => e.when === 'live' && !e.replay);
     loadScores();
     loadFixtures(foryou ? mine.events : data.events).then(({ found, pending }) => {
@@ -1150,6 +1171,7 @@ async function viewSports() {
   // The two teams as shown, each with its crest: catalogue names decide which id is which, else order.
   function teamSides(ev) {
     if (ev.kind && ev.kind !== 'match') return null;        // "F1: Sprint - GP Singapur" is one event, not two sides
+    if (ev.sport === 'f1') return null;                     // nor is "Brad Pitt vs McLaren" (a feature)
     const pair = names.teams(ev.title);
     if (!pair) return null;
     const ids = (ev.teams || []).slice(0, 2);
@@ -1166,7 +1188,8 @@ async function viewSports() {
     return pair.map((label, i) => {
       const t = known(sideIds[i]);
       const flag = fl[i] || (t && t.national ? flags.flagCode(t.name) : '');   // a known national side on its own counts too
-      return { label, id: sideIds[i], crest: art.crest(sideIds[i], label), flag, national: !!(t && t.national) };
+      const g = sideIds[i] ? '' : guestIdx.get(`${ev.sport}|${label}`) || '';       // looked up by name on the Pi
+      return { label, id: sideIds[i], art: sideIds[i] || (g && hasArt(g) ? g : ''), crest: art.crest(sideIds[i], label), flag, national: !!(t && t.national) };
     });
   }
 
@@ -1194,7 +1217,8 @@ async function viewSports() {
       return disc();
     }
     const im = h('img', { src: artUrl(id, big ? 256 : 128), alt: '', decoding: 'async' });
-    const el = h('span', { class: 'crest real', 'aria-hidden': 'true' }, im);
+    const photo = id.startsWith('guest:') && (sport === 'mma' || sport === 'boxing');   // a fighter: head and shoulders
+    const el = h('span', { class: `crest real ${photo ? 'photo' : ''}`, 'aria-hidden': 'true' }, im);
     im.addEventListener('error', () => {
       el.replaceWith(disc());
       if (gap) noteGap(id, gap.label, gap.context, gap.comp, 'load-failed');
@@ -1262,7 +1286,7 @@ async function viewSports() {
       compLabel(ev, meta || SPORT_NAMES[ev.sport] || 'Sport', where), ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, star);
     const sides = teamSides(ev);
     const name = (t) => { const s = capsSpan(t.label); s.classList.add('fx-name'); return s; };
-    const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.id, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }, t.flag), name(t),
+    const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.art, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }, t.flag), name(t),
       sk ? h('span', { class: 'fx-score', dataset: { team: sideToken(t) }, 'aria-hidden': 'true' }) : null)))
       : h('div', { class: 'fx-title' }, capsSpan(ev.title));
     const mainBtn = h('button', { class: 'fx-main', type: 'button', 'aria-label': `Play ${ev.title} on ${best.ch.name}` }, title);
@@ -1315,8 +1339,8 @@ async function viewSports() {
     const sides = teamSides(ev);
     const title = h('span', { class: `dep-title ${isFavEvent(ids) ? 'is-fav' : ''}` });
     const gap = (t) => ({ label: t.label, context: 'sports:board', comp: ev.comp });
-    if (sides) title.append(crestEl(sides[0].crest, sides[0].id, false, ev.sport, gap(sides[0]), sides[0].flag), capsSpan(sides[0].label), h('span', { class: 'vs', text: 'v' }),
-      crestEl(sides[1].crest, sides[1].id, false, ev.sport, gap(sides[1]), sides[1].flag), capsSpan(sides[1].label));
+    if (sides) title.append(crestEl(sides[0].crest, sides[0].art, false, ev.sport, gap(sides[0]), sides[0].flag), capsSpan(sides[0].label), h('span', { class: 'vs', text: 'v' }),
+      crestEl(sides[1].crest, sides[1].art, false, ev.sport, gap(sides[1]), sides[1].flag), capsSpan(sides[1].label));
     else title.append(capsSpan(ev.title));
     const mainBtn = h('button', { class: 'dep-main', type: 'button', 'aria-label': `${ev.title}, ${fmtClock(ev.start)}, on ${best.ch.name}` },
       title, h('span', { class: 'dep-meta' }, hasArt(ev.comp_id) ? h('img', { class: 'comp-logo', src: artUrl(ev.comp_id, 64), alt: '', decoding: 'async' })
@@ -2699,9 +2723,41 @@ function renderInterface(box) {
 // Sports artwork: coverage and the crests / logos the Sports view has had to draw generated
 // (the Pi's gap registry; the full report is `iptv artwork missing` over SSH)
 function renderArtwork(box) {
+  const OPEN_KEY = 'tv.next.artOpen';                     // collapsed unless this device opened it
+  let open = false;
+  try { open = localStorage.getItem(OPEN_KEY) === '1'; } catch { /* private mode */ }
   let pick = 'seen';
+  let all = false;                                        // the first 5, or up to 12
+  let gaps = [];
   const list = h('ol', { class: 'gap-list' });
+  const more = h('button', { class: 'btn ghost small', type: 'button', hidden: true });
   const sum = h('p', { class: 'muted small', text: 'Loading…' });
+  const toggle = h('button', { class: 'btn ghost small art-toggle', type: 'button', 'aria-expanded': 'false' }, h('span'), icon('chev-down'));
+  const body = h('div', { class: 'art-body' },
+    seg('Artwork gaps', [['seen', 'Most seen'], ['recent', 'Recent'], ['resolved', 'Resolved']], pick, (v) => { pick = v; all = false; draw(); }), list, more,
+    h('p', { class: 'muted small', text: 'Generated crests and marks drawn for want of verified artwork. Full report: iptv artwork missing.' }));
+  const paintOpen = () => {
+    body.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.firstChild.textContent = open ? 'Hide gaps' : 'Show gaps';
+  };
+  toggle.addEventListener('click', () => {
+    open = !open;
+    try { localStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch { /* private mode */ }
+    paintOpen();
+  });
+  const paintRows = () => {
+    const shown = gaps.slice(0, all ? 12 : 5);
+    const rows = shown.map((g) => h('li', { class: 'gap' },
+      h('span', { class: 'gap-n', text: `${g.count}×` }),
+      h('span', { class: 'gap-what' }, h('span', {}, h('b', { text: g.name }), h('span', { class: 'muted', text: ` ${g.type === 'competition' ? 'logo' : g.type === 'unlisted team' ? 'unlisted team' : 'crest'} · ${ago(Date.parse(g.last_seen) / 1000)}` })),
+        h('span', { class: 'gap-why', text: g.status === 'resolved' ? `Resolved: ${g.resolved_by}` : g.reason }))));
+    list.replaceChildren(...(rows.length ? rows : [h('li', { class: 'muted small', text: pick === 'resolved' ? 'Nothing resolved yet.' : 'No gaps recorded: every crest and logo shown so far was real.' })]));
+    const rest = Math.min(gaps.length, 12) - shown.length;
+    more.hidden = rest <= 0;
+    more.textContent = `Show ${rest} more`;
+  };
+  more.addEventListener('click', () => { all = true; paintRows(); });
   const draw = async () => {
     const q = pick === 'resolved' ? 'state=resolved&sort=recent' : `state=open&sort=${pick}`;
     try {
@@ -2710,19 +2766,21 @@ function renderArtwork(box) {
       const d = await r.json();
       const c = d.coverage;
       sum.textContent = `Crests ${c.teams.cached}/${c.teams.of} · logos ${c.competitions.cached}/${c.competitions.of} · ${d.gaps_open} open gap${d.gaps_open === 1 ? '' : 's'}, ${d.gaps_resolved} resolved`;
-      const rows = d.gaps.slice(0, 12).map((g) => h('li', { class: 'gap' },
-        h('span', { class: 'gap-n', text: `${g.count}×` }),
-        h('span', { class: 'gap-what' }, h('span', {}, h('b', { text: g.name }), h('span', { class: 'muted', text: ` ${g.type === 'competition' ? 'logo' : g.type === 'unlisted team' ? 'unlisted team' : 'crest'} · ${ago(Date.parse(g.last_seen) / 1000)}` })),
-          h('span', { class: 'gap-why', text: g.status === 'resolved' ? `Resolved: ${g.resolved_by}` : g.reason }))));
-      list.replaceChildren(...(rows.length ? rows : [h('li', { class: 'muted small', text: pick === 'resolved' ? 'Nothing resolved yet.' : 'No gaps recorded: every crest and logo shown so far was real.' })]));
+      gaps = d.gaps || [];
+      toggle.hidden = false;
+      paintRows();
     } catch {
       sum.textContent = 'Artwork service unavailable.';
+      gaps = [];
+      toggle.hidden = true;
+      body.hidden = true;
       list.replaceChildren();
+      return;
     }
+    paintOpen();
   };
-  box.replaceChildren(h('h2', { text: 'Artwork' }), sum,
-    seg('Artwork gaps', [['seen', 'Most seen'], ['recent', 'Recent'], ['resolved', 'Resolved']], pick, (v) => { pick = v; draw(); }), list,
-    h('p', { class: 'muted small', text: 'Generated crests and marks drawn for want of verified artwork. Full report: iptv artwork missing.' }));
+  box.replaceChildren(h('h2', { text: 'Artwork' }), h('div', { class: 'art-sum' }, sum, toggle), body);
+  paintOpen();
   draw();
 }
 

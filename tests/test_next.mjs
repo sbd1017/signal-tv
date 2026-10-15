@@ -430,6 +430,12 @@ test('event status: the word the provider puts first, for the line under the car
   assert.equal(eventStatus('LIVE TV'), '');
 });
 
+test('a programme word as a side is a show, not two sides', () => {
+  assert.equal(teams('Sunday of Pain - Podsumowanie'), null);
+  assert.equal(teams('Skróty - Ekstraklasa'), null);
+  assert.deepEqual(teams('Usyk - Dubois'), ['Usyk', 'Dubois']);
+});
+
 test('flags: a national side by its name in any of the guides\' languages; both sides or neither', async () => {
   const { flagCode, pairFlags } = await import('../web-next/static/js/flags.js');
   for (const [label, code] of [['Australia (W)', 'au'], ['England', 'gb-eng'], ['England U21', 'gb-eng'], ['Ισπανία', 'es'], ['Słowenia', 'si'],

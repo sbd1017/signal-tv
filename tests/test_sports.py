@@ -298,6 +298,20 @@ class GreekSides(unittest.TestCase):
                           ("Βιλερμπάν", "team:asvel"), ("Ντένβερ Μπρόνκος", "team:denver-broncos")):
             self.assertEqual(sports.resolve_side(side)[1], key, side)
 
+    def test_nfl_in_greek(self):
+        for side, key in (("Σιάτλ Σίχοκς", "team:seattle-seahawks"), ("Κάνσας Σίτι Τσιφς", "team:kansas-city-chiefs"),
+                          ("Νέα Υόρκη Τζετς", "team:new-york-jets")):
+            self.assertEqual(sports.resolve_side(side, sports.NFL)[1], key, side)
+
+
+class NotMatches(unittest.TestCase):
+    def test_wrap_up_shows_and_f1_features(self):
+        for title, ch, why in (("Boxing: Sunday of Pain - Podsumowanie", SPORT_CH, "Polish: summary"),
+                               ("F1: Brad Pitt vs McLaren", SPORT_CH, "F1 has no head-to-heads"), ("Brad Pitt vs McLaren", sports.F1, "")):
+            info = sports.classify(title, "", ch)
+            self.assertTrue(info is None or info.kind != sports.MATCH, f"{title}: {why}")
+        self.assertEqual(sports.classify("Boxing: Usyk - Dubois", "", SPORT_CH).kind, sports.MATCH)
+
     def test_by_sound(self):
         self.assertEqual(sports.greek_latin("Ντόρτμουντ"), "dortmount")          # word-initial ντ is d, inside nt
         self.assertEqual(sports.greek_latin("Γιουβέντους"), "iouventous")

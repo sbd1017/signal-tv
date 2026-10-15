@@ -21,6 +21,7 @@ from . import config, fixtures, images, scores, sportsart
 log = logging.getLogger("tvnext")
 IMMUTABLE = "private, max-age=31536000, immutable"
 ID = re.compile(r"^(team|comp):[a-z0-9-]{1,60}$")
+GUEST = re.compile(r"^guest:[a-z0-9-]{1,60}$")
 PREFIXES = ("/tv-test", "/tv/next", *config.SITES)   # the preview, the live interface, the family sites (deploy/build_ui.py)
 GAP_ID = re.compile(r"^(team|comp|name):[\w -]{1,60}$")
 
@@ -94,20 +95,33 @@ async def image(variant: str, key: str, request: Request):
 
 # ------------------------------------------------------------------ sports artwork
 @route("GET", "/api/art")
-async def art_index(ids: str = "", names: str = ""):
+async def art_index(ids: str = "", names: str = "", guests: str = ""):
     """Which of these entities have artwork (served from the Pi); the rest are queued for lookup.
     names: team names as the guide shows them (newline-separated) for matches the live app sent
     without ids - resolved with this build's own dataset, so teams added here get their crest before
-    the live app knows them."""
+    the live app knows them.
+    guests: "sport|name" lines for sides the dataset doesn't know at all (sportsart guests): looked up by
+    that exact name - a fighter's photo, an unlisted club's badge. -> "guests": {line: guest id}."""
     resolved = {}
     for label in [n.strip() for n in names.split("\n") if n.strip()][:100]:
         i, _, _ = sports.resolve_side(label[:80])
         if i >= 0 and sports.ENTITIES[i].kind in ("club", "national"):
             resolved[label] = sports.ENTITIES[i].key
-    want = [i for i in dict.fromkeys([*ids.split(","), *resolved.values()]) if ID.match(i)][:300]
+    gmap = {}
+    for line in [g.strip() for g in guests.split("\n") if g.strip()][:100]:
+        sport, _, label = line.partition("|")
+        sp = {v: k for k, v in sports.SPORT_KEYS.items()}.get(sport, 0)
+        if sports.resolve_side(label[:80], sp)[0] >= 0:       # a known team after all: its own crest
+            continue
+        gid = sportsart.guest_id(sport, label)
+        if gid and GUEST.match(gid):
+            S.lib.add_guest(gid, label.strip(), sport)
+            gmap[line] = gid
+    want = [i for i in dict.fromkeys([*ids.split(","), *resolved.values()]) if ID.match(i)][:300] + list(dict.fromkeys(gmap.values()))
     idx = S.lib.index()
     queued = S.acq.enqueue([i for i in want if i not in idx]) if config.ART_MODE != "remote" else 0
-    return JSONResponse({"items": {i: idx[i] for i in want if i in idx}, "names": resolved, "queued": queued, "pending": S.acq.q.qsize()},
+    return JSONResponse({"items": {i: idx[i] for i in want if i in idx}, "names": resolved, "guests": gmap, "queued": queued,
+                         "pending": S.acq.q.qsize()},
                         headers={"Cache-Control": "no-store"})
 
 
@@ -189,9 +203,9 @@ async def art_gaps_list(kind: str = "", state: str = "open", sort: str = "seen")
 
 @route("GET", "/art/{kind}/{name}/{size}.webp")
 async def art_file(kind: str, name: str, size: int):
-    if kind not in ("teams", "competitions") or not re.match(r"^[a-z0-9-]{1,60}$", name):
+    if kind not in ("teams", "competitions", "guests") or not re.match(r"^[a-z0-9-]{1,60}$", name):
         return Response(status_code=404)
-    eid = f"{'comp' if kind == 'competitions' else 'team'}:{name}"
+    eid = f"{ {'competitions': 'comp', 'guests': 'guest'}.get(kind, 'team')}:{name}"
     if config.ART_MODE == "remote":                 # development: fetch, don't keep
         got = await sportsart.acquire(eid, S.lib, S.acq.src, persist=False)
         if not got:

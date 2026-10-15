@@ -232,6 +232,68 @@ class Acquire(unittest.TestCase):
             self.assertEqual(meta["match"]["method"], "manual override")
 
 
+def player(id_, name, sport="Fighting", cutout="https://r2.thesportsdb.com/images/media/player/cutout/x.png"):
+    return {"idPlayer": id_, "strPlayer": name, "strSport": sport, "strCutout": cutout, "strThumb": None}
+
+
+class Guests(unittest.TestCase):
+    """Sides the dataset doesn't know: looked up by their exact name in their sport, else nothing."""
+
+    def test_ids(self):
+        self.assertEqual(sportsart.guest_id("mma", "Wilson Varela"), "guest:mma--wilson-varela")
+        self.assertEqual(sportsart.guest_id("basketball", "WKS Śląsk Wrocław"), "guest:basketball--wks-slask-wroclaw")
+        self.assertIsNone(sportsart.guest_id("f1", "McLaren"), "not a sport with sides")
+        self.assertIsNone(sportsart.guest_id("nfl", "Σιάτλ Σίχοκς"), "Greek: not searchable as is")
+        self.assertIsNone(sportsart.guest_id("football", "8ª"))
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_one(self, sport, name, answers, espn=None):
+        lib = sportsart.Library(Path(self.tmp.name) / sport)
+        gid = sportsart.guest_id(sport, name)
+        lib.add_guest(gid, name, sport)
+        acq = sportsart.Acquirer(lib, client=None)
+        self.assertEqual(acq.enqueue([gid, gid]), 1)
+        meta = asyncio.run(sportsart.acquire_guest(gid, lib, FakeSource(answers), espn))
+        return meta, lib, gid
+
+    def test_fighter_photo(self):
+        meta, lib, gid = self.run_one("mma", "Wilson Varela", {"searchplayers.php?p=Wilson+Varela": {"player": [player("1", "Wilson Varela")]}})
+        self.assertEqual((meta["type"], meta["source_id"]), ("photo", "1"))
+        self.assertIn(gid, lib.index())
+        self.assertIsNotNone(lib.derivative(gid, 128))
+        self.assertTrue(str(lib.dir(gid)).endswith("guests/mma--wilson-varela"))
+
+    def test_fighter_needs_the_exact_name_and_fighting(self):
+        meta, lib, gid = self.run_one("mma", "Alex Pereira", {"searchplayers.php?p=Alex+Pereira": {"player": [
+            player("2", "Alex Pereira", sport="Soccer"), player("3", "Alexandre Pereira")]}})
+        self.assertIsNone(meta)
+        self.assertIn(gid, lib.misses())
+
+    def test_unlisted_club_badge_in_its_own_sport(self):
+        meta, _, _ = self.run_one("basketball", "King Szczecin", {"searchteams.php?t=King+Szczecin": {"teams": [
+            team("9", "King Szczecin", "Poland", sport="Basketball"), team("8", "King Szczecin", "Poland", gender="Female", sport="Basketball")]}})
+        self.assertEqual(meta["source_id"], "9")
+
+    def test_two_same_named_clubs_is_nothing(self):
+        meta, _, _ = self.run_one("football", "Port FC", {"searchteams.php?t=Port+FC": {"teams": [
+            team("1", "Port FC", "Thailand"), team("2", "Port FC", "Ghana")]}})
+        self.assertIsNone(meta)
+
+    def test_college_side_from_espn(self):
+        espn = FakeESPN({f"{sportsart.ESPN.BASE}/football/college-football/teams?limit=1000": {"sports": [{"leagues": [{"teams": [
+            {"team": {"id": "290", "location": "Georgia Southern", "displayName": "Georgia Southern Eagles", "shortDisplayName": "Georgia Southern",
+                      "logos": [{"href": "https://a.espncdn.com/i/teamlogos/ncaa/500/290.png", "rel": ["full", "default"]}]}},
+            {"team": {"id": "2247", "location": "Georgia State", "displayName": "Georgia State Panthers", "shortDisplayName": "Georgia St",
+                      "logos": [{"href": "https://a.espncdn.com/i/teamlogos/ncaa/500/2247.png", "rel": ["full", "default"]}]}}]}]}]}})
+        meta, _, _ = self.run_one("nfl", "Georgia Southern", {}, espn)
+        self.assertEqual((meta["source"], meta["source_id"]), ("espn", "290"))
+
+
 class Images(unittest.TestCase):
     def test_variants_never_upscale_and_keep_aspect(self):
         data, facts = images.render(png(1000, 563, alpha=False, fmt="JPEG"), "hero")

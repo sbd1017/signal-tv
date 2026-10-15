@@ -20,8 +20,13 @@ clubs - the expected country; national teams must be the country's own team in a
 competition. Anything ambiguous stays a miss and the page keeps its generated crest. Manual
 mappings (overrides.json) pin one source record; each carries a note saying how it was checked.
 
+Guests: a side the guide names that has no canonical entry - an unlisted club, a fighter - is looked
+up by that exact name (guest:<sport>--<name>; see "guests" below): the same name in the same sport,
+and only one such record, or nothing. Fighters get the source's photo; clubs their badge.
+
 Layout under STATE/sports-art/ (durable; the generated derivatives can be rebuilt):
-  teams/<slug>/original.<ext> + meta.json       competitions/<slug>/...
+  teams/<slug>/original.<ext> + meta.json       competitions/<slug>/...      guests/<slug>/...
+  guests.json      the guests asked for: id -> {name, sport, first}
   derivatives/<teams|competitions>/<slug>/<64|128|256>.webp
   stadiums/ fanart/                             (reserved: photos are not used yet)
   overrides.json   manual corrections, on top of tvnext/overrides.json (shipped, in git):
@@ -205,6 +210,10 @@ def slug(eid: str) -> str:
     return eid.split(":", 1)[1]
 
 
+def kind_dir(eid: str) -> str:
+    return "competitions" if eid.startswith("comp:") else "guests" if eid.startswith("guest:") else "teams"
+
+
 # ------------------------------------------------------------------ canonical entities
 def entities() -> dict[str, dict]:
     """sports.py DATA with original spellings: key -> {kind, section, sport, names, weak, priority}."""
@@ -382,13 +391,13 @@ def wd_ids(item: dict, prop: str) -> list[str]:
 class Library:
     def __init__(self, root: Path | None = None):
         self.root = root or (config.STATE / "sports-art")
-        for d in ("teams", "competitions", "stadiums", "fanart", "derivatives/teams", "derivatives/competitions"):
+        for d in ("teams", "competitions", "guests", "stadiums", "fanart", "derivatives/teams", "derivatives/competitions", "derivatives/guests"):
             (self.root / d).mkdir(parents=True, exist_ok=True)
         self._index: dict | None = None
         self.gaps = Gaps(self.root / "gaps.json")
 
     def dir(self, eid: str) -> Path:
-        return self.root / ("competitions" if eid.startswith("comp:") else "teams") / slug(eid)
+        return self.root / kind_dir(eid) / slug(eid)
 
     def meta(self, eid: str) -> dict | None:
         try:
@@ -420,6 +429,22 @@ class Library:
     def misses(self) -> dict:
         return self._json("misses.json")
 
+    def guests(self) -> dict:
+        if getattr(self, "_guests", None) is None:
+            self._guests = self._json("guests.json")
+        return self._guests
+
+    def add_guest(self, gid: str, name: str, sport: str) -> None:
+        g = self.guests()
+        if gid in g:
+            return
+        if len(g) >= 5000:                                   # forget the oldest without artwork
+            idx = self.index()
+            for k in sorted((k for k in g if k not in idx), key=lambda k: g[k].get("first", ""))[:1000]:
+                g.pop(k)
+        g[gid] = {"name": name, "sport": sport, "first": now_iso()}
+        self._write_json("guests.json", g)
+
     def log(self, entry: dict) -> None:
         with open(self.root / "log.jsonl", "a") as f:
             f.write(json.dumps({"t": now_iso(), **entry}, ensure_ascii=False) + "\n")
@@ -428,7 +453,7 @@ class Library:
         """eid -> {v, sizes} for every entity with artwork (cached; rebuilt when something changes)."""
         if self._index is None:
             idx = {}
-            for kind in ("teams", "competitions"):
+            for kind in ("teams", "competitions", "guests"):
                 for d in (self.root / kind).iterdir() if (self.root / kind).exists() else []:
                     try:
                         m = json.loads((d / "meta.json").read_text())
@@ -483,7 +508,7 @@ class Library:
                 im = f.copy()
         im = im.convert("RGBA")
         out = {}
-        dd = self.root / "derivatives" / ("competitions" if eid.startswith("comp:") else "teams") / slug(eid)
+        dd = self.root / "derivatives" / kind_dir(eid) / slug(eid)
         dd.mkdir(parents=True, exist_ok=True)
         for s in SIZES:
             t = im.copy()
@@ -495,7 +520,7 @@ class Library:
     def derivative(self, eid: str, size: int) -> Path | None:
         if size not in SIZES:
             return None
-        p = self.root / "derivatives" / ("competitions" if eid.startswith("comp:") else "teams") / slug(eid) / f"{size}.webp"
+        p = self.root / "derivatives" / kind_dir(eid) / slug(eid) / f"{size}.webp"
         if not p.exists() and self.meta(eid):
             self.derive(eid)
         return p if p.exists() else None
@@ -518,7 +543,7 @@ class Library:
         """Forget one entity's artwork and miss record (a broken mapping): it is looked up again."""
         import shutil
         shutil.rmtree(self.dir(eid), ignore_errors=True)
-        shutil.rmtree(self.root / "derivatives" / ("competitions" if eid.startswith("comp:") else "teams") / slug(eid), ignore_errors=True)
+        shutil.rmtree(self.root / "derivatives" / kind_dir(eid) / slug(eid), ignore_errors=True)
         m = self.misses()
         if m.pop(eid, None) is not None:
             self._write_json("misses.json", m)
@@ -527,8 +552,8 @@ class Library:
     def clear_derivatives(self) -> int:
         import shutil
         n = 0
-        for kind in ("teams", "competitions"):
-            for d in (self.root / "derivatives" / kind).iterdir():
+        for kind in ("teams", "competitions", "guests"):
+            for d in (self.root / "derivatives" / kind).iterdir() if (self.root / "derivatives" / kind).exists() else []:
                 shutil.rmtree(d, ignore_errors=True)
                 n += 1
         return n
@@ -536,7 +561,7 @@ class Library:
     def usage(self) -> dict:
         def size(p: Path) -> int:
             return sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) if p.exists() else 0
-        return {"originals": size(self.root / "teams") + size(self.root / "competitions"),
+        return {"originals": size(self.root / "teams") + size(self.root / "competitions") + size(self.root / "guests"),
                 "derivatives": size(self.root / "derivatives"), "total": size(self.root)}
 
 
@@ -613,7 +638,7 @@ class ESPN(Source):
         hit = self._lists.get(path)
         if hit and time.time() - hit[0] < 86400:
             return hit[1]
-        d = await self.get(f"{self.BASE}/{path}/teams")
+        d = await self.get(f"{self.BASE}/{path}/teams", {"limit": "1000"} if "college" in path else None)
         try:
             out = [t["team"] for t in d["sports"][0]["leagues"][0].get("teams", [])]
         except (KeyError, IndexError, TypeError):
@@ -822,6 +847,115 @@ async def find_wikidata(eid: str, ent: dict, src: Wikidata, ov: dict) -> tuple[d
 FINDERS = {"thesportsdb": find_tsdb, "espn": find_espn, "wikidata": find_wikidata}
 
 
+# ------------------------------------------------------------------ guests
+GUEST_SPORTS = {"football": "Soccer", "basketball": "Basketball", "nfl": "American Football", "mma": "Fighting",
+                "boxing": "Fighting", "rugby": "Rugby", "hockey": "Ice Hockey", "handball": "Handball", "volleyball": "Volleyball"}
+PEOPLE = {"mma", "boxing"}
+# ESPN's team lists as a second source: US college sides (the "NFL" and basketball listings carry them)
+ESPN_GUEST = {"nfl": ("football/college-football",), "basketball": ("basketball/mens-college-basketball",)}
+PHOTO_LICENCE = ("TheSportsDB community artwork (www.thesportsdb.com), used for personal, non-commercial display; "
+                 "the photo's rights stay with its owner.")
+_LATIN = re.compile(r"^[\w\s.'’&()-]+$")
+
+
+def guest_id(sport: str, name: str) -> str | None:
+    """guest:<sport>--<name-slug> for a Latin-script name in a sport the sources cover; else None."""
+    name = (name or "").strip()
+    if sport not in GUEST_SPORTS or not 2 < len(name) <= 60 or not _LATIN.match(name):
+        return None
+    if re.search(r"[\u0370-\u03ff\u0400-\u04ff\u0590-\u06ff]", name):      # Greek, Cyrillic, Hebrew, Arabic: not searchable as is
+        return None
+    sl = re.sub(r"[^a-z0-9]+", "-", sports.norm(name).translate(_FOLD)).strip("-")
+    return f"guest:{sport}--{sl}"[:66] if re.search(r"[a-z]{2}", sl) else None
+
+
+def guest_entity(lib: "Library", gid: str) -> dict | None:
+    g = lib.guests().get(gid)
+    if not g:
+        return None
+    return {"key": gid, "kind": "person" if g["sport"] in PEOPLE else "team", "section": "guest", "sport": g["sport"],
+            "names": [g["name"]], "weak": [], "priority": 0}
+
+
+async def find_guest(ent: dict, tsdb: TheSportsDB, espn: "ESPN | None") -> tuple[dict | None, str, list[str]]:
+    """The one record with exactly this name in this sport: a fighter's photo or a club's badge."""
+    name, sport = ent["names"][0], ent["sport"]
+    want = _key(name)
+    if ent["kind"] == "person":
+        path = f"searchplayers.php?{httpx.QueryParams({'p': name})}"
+        d = await tsdb.api(path)
+        ok = {p["idPlayer"]: p for p in d.get("player") or []
+              if p.get("strSport") == "Fighting" and _key(p.get("strPlayer") or "") == want}
+        if len(ok) != 1:
+            return None, (f"ambiguous: {len(ok)} fighters" if ok else "no fighter with that name"), [name]
+        p = next(iter(ok.values()))
+        url = p.get("strCutout") or p.get("strThumb") or ""
+        return _found(url, "thesportsdb", p["idPlayer"], p.get("strPlayer"), f"{config.TSDB_BASE}/<key>/{path}", "exact name + fighting",
+                      [name], PHOTO_LICENCE, "TheSportsDB", type="photo", sport="Fighting"), "", [name]
+    full = lambda n: sports.norm(n).translate(_FOLD)          # noqa: E731
+    if len(want) < 5 and " " not in want:
+        # a short name ("Port FC" is "port" without its FC): only the whole name, word for word
+        want, key = full(name), full
+        if len(want) < 5:
+            return None, "name too short to look up safely", []
+    else:
+        key = _key
+    tried = [f"thesportsdb: {name}"]
+    path = f"searchteams.php?{httpx.QueryParams({'t': name})}"
+    d = await tsdb.api(path)
+    ok = {}
+    for c in d.get("teams") or []:
+        cn = {key(c.get("strTeam") or ""), key(c.get("strTeamShort") or "")} | {key(a) for a in _alts(c.get("strTeamAlternate"))}
+        if c.get("strSport") == GUEST_SPORTS[sport] and (c.get("strGender") or "Male") == "Male" \
+                and not NOT_FIRST_TEAM.search(c.get("strTeam") or "") and want in cn:
+            ok[c["idTeam"]] = c
+    if len(ok) == 1:
+        c = next(iter(ok.values()))
+        return _found(_badge(c), "thesportsdb", c["idTeam"], c.get("strTeam"), f"{config.TSDB_BASE}/<key>/{path}", "exact name + sport",
+                      tried, LICENCE, "TheSportsDB", sport=c.get("strSport"), country=c.get("strCountry")), "", tried
+    reason = f"ambiguous: {len(ok)} teams" if ok else "no team with that name in that sport"
+    if len(ok) > 1 or not espn:
+        return None, reason, tried
+    for lp in ESPN_GUEST.get(sport, ()):
+        tried.append(f"espn: {lp}")
+        hits = {t["id"]: t for t in await espn.teams(lp)
+                if want in {key(t.get(f) or "") for f in ("location", "displayName", "shortDisplayName")}}
+        if len(hits) == 1:
+            t = next(iter(hits.values()))
+            return _found(espn_logo(t.get("logos")), "espn", t["id"], t.get("displayName"), f"{ESPN.BASE}/{lp}/teams/{t['id']}",
+                          f"exact name, listed in {lp}", tried, ESPN_LICENCE, "ESPN", path=f"{lp}/teams/{t['id']}"), "", tried
+        if hits:
+            return None, f"ambiguous: {len(hits)} teams in {lp}", tried
+    return None, reason, tried
+
+
+async def acquire_guest(gid: str, lib: "Library", tsdb: TheSportsDB, espn: "ESPN | None") -> dict | None:
+    ent = guest_entity(lib, gid)
+    if not ent:
+        return None
+    try:
+        found, reason, tried = await find_guest(ent, tsdb, espn)
+    except Exception as e:                                    # source down: tomorrow
+        lib.miss(gid, f"lookup failed: {e.__class__.__name__}", [], error=True)
+        lib.log({"id": gid, "result": "error", "error": f"{e.__class__.__name__}: {e}"[:200]})
+        return None
+    if not found or not found.get("url"):
+        lib.miss(gid, reason or "matched, but the source has no image", tried)
+        lib.log({"id": gid, "result": "miss", "reason": reason, "tried": tried})
+        return None
+    src = tsdb if found["source"] == "thesportsdb" else espn
+    try:
+        data = await src.image(found["url"])
+        typ = found["match"].pop("type", None)
+        meta = lib.store(gid, data, {"name": ent["names"][0], "source_url": found.pop("url"), **found, **({"type": typ} if typ else {})})
+    except Exception as e:
+        lib.miss(gid, f"image: {e.__class__.__name__}", tried, error=True)
+        lib.log({"id": gid, "result": "error", "error": f"image: {e.__class__.__name__}: {e}"[:200]})
+        return None
+    lib.log({"id": gid, "result": "cached", "source": meta["source"], "source_id": meta["source_id"], "bytes": len(data)})
+    return meta
+
+
 def _pinned(ov: dict) -> str | None:
     """The source a manual override names (an override without one is TheSportsDB's)."""
     if ov.get("qid"):
@@ -926,8 +1060,9 @@ class Acquirer:
     def enqueue(self, ids) -> int:
         n = 0
         known = entities()
+        guests = self.lib.guests()
         for eid in ids:
-            if eid in known and self.wanted(eid):
+            if (eid in known or (eid.startswith("guest:") and eid in guests)) and self.wanted(eid):
                 self.queued.add(eid)
                 self.q.put_nowait(eid)
                 n += 1
@@ -937,7 +1072,8 @@ class Acquirer:
         while True:
             eid = await self.q.get()
             try:
-                meta = await acquire(eid, self.lib, self.src, more=self.more)
+                meta = (await acquire_guest(eid, self.lib, self.src, next((s for s in self.more if s.name == "espn"), None))
+                        if eid.startswith("guest:") else await acquire(eid, self.lib, self.src, more=self.more))
                 self.done["cached" if meta else "miss"] += 1
             except Exception as e:                            # never let one entity stop the queue
                 self.lib.log({"id": eid, "result": "error", "error": f"{e.__class__.__name__}: {e}"[:200]})

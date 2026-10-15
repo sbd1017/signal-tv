@@ -108,9 +108,12 @@ export function eventStatus(raw) {
 // "RC Lens vs Sporting CP" -> ["RC Lens", "Sporting CP"]; null when the title is not a pairing.
 // A cricket stage in front of the first side is not part of its name: "4th Test England vs India".
 const STAGE = /^(?:\d+(?:st|nd|rd|th)\s+(?:test|odi|t20i?|one-day international|match|game)|(?:first|second|third|fourth|fifth)\s+test)\s*[:\-–]?\s+/i;
+// A side that is a programme word ("Sunday of Pain - Podsumowanie": Polish for "summary") means a show.
+const SHOW_SIDE = /^(podsumowanie|skr[oó]ty?|magazyn|zapowied[zź]|studio|highlights?|preview|review|analysis|reaction|sestřih|sažetak|rezumat|özet|resumen|resumo|zusammenfassung|samenvatting)$/i;
 export function teams(title) {
   const m = String(title || '').match(/^(.+?)\s+(?:vs\.?|v\.?|x|-|–)\s+(.+)$/i);
   if (!m || m[1].length > 40 || m[2].length > 40) return null;
+  if (SHOW_SIDE.test(m[1].trim()) || SHOW_SIDE.test(m[2].trim())) return null;
   return [m[1].trim().replace(STAGE, ''), m[2].trim()];
 }
 

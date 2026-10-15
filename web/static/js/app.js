@@ -1,13 +1,13 @@
 // Signal TV - app shell, router and views. No framework; all provider text is
 // inserted with textContent (never innerHTML).
 import { api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
-  chunked, toast, fmtClock, fmtDuration, fmtTime, img } from './api.js?v=20261015230000';
-import * as caps from './caps.js?v=20261015230000';
-import * as store from './store.js?v=20261015230000';
-import { Player } from './player.js?v=20261015230000';
-import * as tracks from './tracks.js?v=20261015230000';
-import * as lang from './lang.js?v=20261015230000';
-import * as names from './names.js?v=20261015230000';
+  chunked, toast, fmtClock, fmtDuration, fmtTime, img } from './api.js?v=20261016000500';
+import * as caps from './caps.js?v=20261016000500';
+import * as store from './store.js?v=20261016000500';
+import { Player } from './player.js?v=20261016000500';
+import * as tracks from './tracks.js?v=20261016000500';
+import * as lang from './lang.js?v=20261016000500';
+import * as names from './names.js?v=20261016000500';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');

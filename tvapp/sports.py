@@ -617,6 +617,7 @@ TERMS = {
 # Not a live sports programme (kept for search, left out of the Sports view's live lists).
 SHOW_WORDS = ("highlights | highlight | hl | hlts | hls | hoogtepunten | magazine | magazin | review | preview | greatest | classic | classics | "
               "rescaldo | antevisao | previa | avant match | apres match | nachbericht | vorbericht | "
+              "podsumowanie | skrot | skroty | magazyn | zapowiedz | sestrih | sazetak | rezumat | ozet | "
               "rewind | best of | goals | stories | story | documentary | docu | doku | dokumentation | build up | "
               "buildup | countdown | studio | show | weekly | talk | news | analysis | roundup | round up | "
               "all or nothing | match of the day | motd | goal rush | moments | momenti | momentos | hojdpunkter | "
@@ -771,6 +772,20 @@ GREEK_NAMES = {
     "luxembourg": "Λουξεμβούργο", "egypt": "Αίγυπτος", "algeria": "Αλγερία", "tunisia": "Τυνησία", "nigeria": "Νιγηρία",
     "senegal": "Σενεγάλη", "ghana": "Γκάνα", "cameroon": "Καμερούν", "canada": "Καναδάς", "chile": "Χιλή", "peru": "Περού",
     "ecuador": "Εκουαδόρ", "paraguay": "Παραγουάη", "iran": "Ιράν", "qatar": "Κατάρ", "saudi-arabia": "Σαουδική Αραβία",
+    # NFL, as Greek guides (Cosmote, Nova) spell them; the sound match alone misses "Σιάτλ Σίχοκς"
+    "arizona-cardinals": "Αριζόνα Κάρντιναλς", "atlanta-falcons": "Ατλάντα Φάλκονς", "baltimore-ravens": "Βαλτιμόρη Ρέιβενς | Μπάλτιμορ Ρέιβενς",
+    "buffalo-bills": "Μπάφαλο Μπιλς", "carolina-panthers": "Καρολάινα Πάνθερς", "chicago-bears": "Σικάγο Μπέαρς",
+    "cincinnati-bengals": "Σινσινάτι Μπένγκαλς", "cleveland-browns": "Κλίβελαντ Μπράουνς", "dallas-cowboys": "Ντάλας Κάουμποϊς",
+    "denver-broncos": "Ντένβερ Μπρόνκος", "detroit-lions": "Ντιτρόιτ Λάιονς", "green-bay-packers": "Γκριν Μπέι Πάκερς | Γκρην Μπέι Πάκερς",
+    "houston-texans": "Χιούστον Τέξανς", "indianapolis-colts": "Ιντιανάπολις Κολτς", "jacksonville-jaguars": "Τζάκσονβιλ Τζάγκουαρς",
+    "kansas-city-chiefs": "Κάνσας Σίτι Τσιφς", "las-vegas-raiders": "Λας Βέγκας Ρέιντερς", "los-angeles-chargers": "Λος Άντζελες Τσάρτζερς",
+    "los-angeles-rams": "Λος Άντζελες Ραμς", "miami-dolphins": "Μαϊάμι Ντόλφινς", "minnesota-vikings": "Μινεσότα Βάικινγκς",
+    "new-england-patriots": "Νιού Ίνγκλαντ Πάτριοτς | Νιου Ινγκλαντ Πάτριοτς", "new-orleans-saints": "Νέα Ορλεάνη Σέιντς | Νιου Όρλινς Σέιντς",
+    "new-york-giants": "Νιου Γιορκ Τζάιαντς | Νέα Υόρκη Τζάιαντς", "new-york-jets": "Νιου Γιορκ Τζετς | Νέα Υόρκη Τζετς",
+    "philadelphia-eagles": "Φιλαδέλφεια Ίγκλς", "pittsburgh-steelers": "Πίτσμπουργκ Στίλερς",
+    "san-francisco-49ers": "Σαν Φρανσίσκο 49ers | Σαν Φρανσίσκο Φόρτι Νάινερς", "seattle-seahawks": "Σιάτλ Σίχοκς",
+    "tampa-bay-buccaneers": "Τάμπα Μπέι Μπουκανίρς | Τάμπα Μπέι Μπακανίαρς", "tennessee-titans": "Τενεσί Τάιτανς",
+    "washington-commanders": "Ουάσιγκτον Κομάντερς",
 }
 
 ENTITIES = _load(DATA)
@@ -1170,7 +1185,10 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
         info.youth = True                            # "Leipzig v PSV", description "UEFA Youth League"
     if comp and any(w in WOMEN_WORDS for w in comp.names[0].split()):
         info.women = True                            # "Chelsea v Arsenal" in the Women's Super League
-    if pair:
+    if pair and sport == F1:
+        info.kind = SHOW                             # F1 has no head-to-heads: "Brad Pitt vs McLaren" is a feature
+        info.key = "|".join(sides)
+    elif pair:
         info.kind = SHOW if show else MATCH
         info.key = ("w|" if info.women else "") + ("y|" if info.youth else "") + "|".join(sides)
     elif sport == F1:
