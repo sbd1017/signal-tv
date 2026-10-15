@@ -2319,7 +2319,7 @@ function renderTimes(box) {
     setTimeMode(was);
     return t;
   };
-  const opts = [['pi', pi ? `${zoneName(pi)} time (the Pi's)` : 'The Pi’s time'], ['device', `This device’s${dev ? ` (${zoneName(dev)})` : ''}`]];
+  const opts = [['pi', pi ? `${zoneName(pi)} (the Pi)` : 'The Pi’s zone'], ['device', `This device${dev ? ` (${zoneName(dev)})` : ''}`]];
   const note = h('p', { class: 'muted small' });
   const paintNote = () => {
     const same = sample('pi') === sample('device');
