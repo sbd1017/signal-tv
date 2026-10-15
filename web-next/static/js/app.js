@@ -1479,13 +1479,19 @@ function setPosterBadges(poster, id) {
 }
 
 // ---- catalogue language (lang.js): one synced preference for Films, Series and Search
-const LANG_PREFS = [['all', 'All'], ['first', 'English first'], ['only', 'English only']];
-const langPref = () => { const v = store.prefs.get('catLang', 'all'); return LANG_PREFS.some(([k]) => k === v) ? v : 'all'; };
+// The viewer's language (Settings › Languages, synced): English unless they chose one the catalogue carries.
+const langWant = () => { const v = store.prefs.get('catLangCode', 'en'); return /^[a-z]{2,3}$/.test(v) ? v : 'en'; };
+const langPrefs = () => { const n = lang.langName(langWant()); return [['all', 'All'], ['first', `${n} first`], ['only', `${n} only`]]; };
+const langPref = () => { const v = store.prefs.get('catLang', 'all'); return ['all', 'first', 'only'].includes(v) ? v : 'all'; };
 function vinfo(it) {                       // cached on the item: version tier, title key, display bits
+  const want = langWant();
   if (!it.vi) {
     const f = names.film(it.name);
     const year = it.year || f.year;
-    it.vi = { tier: lang.versionTier(it.name), key: lang.titleKey(f.title, year), clean: f.title, prefix: f.prefix, code: lang.versionCode(f.prefix), uhd: f.uhd };
+    it.vi = { tier: lang.versionTier(it.name, want), want, key: lang.titleKey(f.title, year), clean: f.title, prefix: f.prefix, code: lang.versionCode(f.prefix), uhd: f.uhd };
+  } else if (it.vi.want !== want) {
+    it.vi.tier = lang.versionTier(it.name, want);
+    it.vi.want = want;
   }
   return it.vi;
 }
@@ -1493,18 +1499,23 @@ function vinfo(it) {                       // cached on the item: version tier, 
 // (sort, preference) like sortedItems() itself.
 function langItems(list, sort, pref) {
   if (pref === 'all') return sortedItems(list, sort);
-  const k = `${sort}|${pref}`;
+  const k = `${sort}|${pref}|${langWant()}`;
   if (!list.sorted[k]) list.sorted[k] = lang.rankByLanguage(lang.applyLangPref(sortedItems(list, sort), pref, vinfo), vinfo);
   return list.sorted[k];
 }
-const LANG_HELP = 'Language is read from the provider’s own labels (EN, DE, “dubbed”…), so it is a good guide, not a guarantee. '
-  + 'English first lists English titles first, then unlabelled ones, then other languages, each in the order you picked (in search, the best match still comes first). '
-  + 'English only hides versions labelled as another language. Unlabelled titles always stay, so a few foreign ones can remain.';
+const langHelp = () => {
+  const n = lang.langName(langWant());
+  return 'Language is read from the provider’s own labels (EN, DE, “dubbed”…), so it is a good guide, not a guarantee. '
+    + `${n} first lists ${n} titles first, then unlabelled ones, then other languages, each in the order you picked (in search, the best match still comes first). `
+    + (langWant() === 'en' ? 'English only hides versions labelled as another language. '
+      : `${n} only hides versions dubbed into another language, and English or subtitled versions of a title that also exists in ${n}. `)
+    + 'Unlabelled titles always stay, so a few foreign ones can remain. Choose your language in Settings › Languages.';
+};
 // the segmented control + a small "i" that says what the choice can and can't promise
 function langSeg(onchange) {
-  const s = seg('Language', LANG_PREFS, langPref(), (v) => { store.prefs.set('catLang', v); onchange(v); });
-  s.title = LANG_HELP;
-  const help = h('p', { class: 'lang-help', hidden: true, text: LANG_HELP });
+  const s = seg('Language', langPrefs(), langPref(), (v) => { store.prefs.set('catLang', v); onchange(v); });
+  s.title = langHelp();
+  const help = h('p', { class: 'lang-help', hidden: true, text: langHelp() });
   const info = h('button', { class: 'info-btn', type: 'button', 'aria-expanded': 'false', 'aria-label': 'About the language choice' }, icon('info'));
   info.addEventListener('click', () => { help.hidden = !help.hidden; info.setAttribute('aria-expanded', String(!help.hidden)); });
   const box = h('span', { class: 'lang-ctl' }, s, info);
@@ -1584,6 +1595,7 @@ async function viewGrid(kind) {
   heroFor(kind, list, heroBox);
   state.cleanup.push(() => clearTimeout(qTimer));
   state.redraw = (changed) => {
+    if (changed.has('pref') && lSeg.seg.firstChild.nextSibling.textContent !== langPrefs()[1][1]) { render(true); return; }  // another language chosen
     if (changed.has('pref') && lSeg.seg.querySelector('[aria-selected="true"]').dataset.v !== langPref()) {
       for (const b of lSeg.seg.children) b.setAttribute('aria-selected', String(b.dataset.v === langPref()));
       draw();
@@ -1607,7 +1619,7 @@ const heroWindow = () => hero.windowOf(Date.now(), -tzOffset());
 
 function savedHero(kind) {
   const s = heroLS.get(kind);
-  return s.v === HERO_V && s.w === heroWindow() && s.pref === langPref() && Array.isArray(s.picks) && s.picks.length ? s.picks : null;
+  return s.v === HERO_V && s.w === heroWindow() && s.pref === `${langPref()}|${langWant()}` && Array.isArray(s.picks) && s.picks.length ? s.picks : null;
 }
 
 async function resolveHero(kind, list) {
@@ -1635,7 +1647,7 @@ async function resolveHero(kind, list) {
     return null;
   }));
   const picks = resolved.filter(Boolean);
-  heroLS.set(kind, { v: HERO_V, w, pref, picks, history: hero.remember(saved.history || [], w, picks.map((p) => p.id)) });
+  heroLS.set(kind, { v: HERO_V, w, pref: `${pref}|${langWant()}`, picks, history: hero.remember(saved.history || [], w, picks.map((p) => p.id)) });
   return picks;
 }
 
@@ -1872,7 +1884,7 @@ async function enrichDetails(kind, d, page) {
   try { list = list || await catalogue(kind); } catch { return; }
   if (parseHash().id !== d.id || !page.isConnected) return;
   const item = list.byId.get(d.id) || { id: d.id, name: d.name, cat: '', year: d.year, key: fold(d.name) };
-  const vs = versions.versionsOf(item, list.items, list.cats);
+  const vs = versions.versionsOf(item, list.items, list.cats, langWant());
   const slot = page.querySelector('.dt-versions');
   if (slot && vs.length) {
     const route = kind === 'movies' ? 'movies' : 'series';
@@ -2507,14 +2519,32 @@ function renderTrackPrefs(box) {
   const ad = h('input', { type: 'checkbox', checked: !!get('audioAd') });
   ad.addEventListener('change', () => set('audioAd', ad.checked));
   const row = (label, control) => h('label', { class: 'pref-row' }, h('span', { text: label }), control);
+  // the catalogue language: one the provider carries (counted from its own labels once the lists are in)
+  const want = langWant();
+  const langSel = selectEl('Your language', [[want, lang.langName(want)]], want, (v) => {
+    store.prefs.set('catLangCode', v);
+    toast(`Saved - Films, Series and Search offer “${lang.langName(v)} first” and “${lang.langName(v)} only”`);
+  });
+  Promise.all(['movies', 'series'].map((k) => catalogue(k).catch(() => null))).then((lists) => {
+    const have = lang.catalogueLangs(lists.filter(Boolean), 100);
+    if (!have.length || !langSel.isConnected) return;
+    if (!have.some(([c]) => c === 'en')) have.push(['en', 0]);
+    if (!have.some(([c]) => c === want)) have.push([want, 0]);
+    const opts = have.map(([c, n]) => [c, `${lang.langName(c)}${n ? ` · ${n.toLocaleString()} titles` : ''}`])
+      .sort((a, b) => (a[0] === 'en' ? -1 : b[0] === 'en' ? 1 : a[1].localeCompare(b[1])));
+    langSel.replaceChildren(...opts.map(([v, t]) => h('option', { value: v, text: t })));
+    langSel.value = langWant();
+  });
   box.replaceChildren(
     h('h2', { text: 'Languages' }),
+    row('Your language', langSel),
     row('Descriptions', selectEl('Film and series descriptions', PLOT_PREFS, plotPref(), (v) => { store.prefs.set('plotLang', v); toast('Saved'); })),
     row('Subtitles', selectEl('Subtitles', tracks.SUB_MODES, get('subMode'), (v) => set('subMode', v))),
     row('Subtitle languages', langInput('subLangs', 'en, fr', 'Subtitle languages')),
     row('Hearing-impaired (SDH)', selectEl('SDH subtitles', tracks.SDH_MODES, get('subSdh'), (v) => set('subSdh', v))),
     row('Audio languages', langInput('audioLangs', 'original', 'Audio languages')),
     h('label', { class: 'pref-check' }, ad, h('span', { text: 'Prefer audio description' })),
+    h('p', { class: 'muted small', text: 'Your language: the one Films, Series and Search put first (“… first” / “… only”), from the languages your provider’s catalogue is labelled in. ' }),
     h('p', { class: 'muted small', text: 'Descriptions: when a version’s description isn’t in English (a Persian or German catalogue, say), the English version’s is shown, with a link back to the original. Subtitle and audio languages: two-letter codes in order of preference, e.g. "en, fr". Leave audio empty for each title’s original language. A choice made in the player is remembered for that film or series.' }));
 }
 

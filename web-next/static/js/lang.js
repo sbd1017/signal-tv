@@ -84,13 +84,68 @@ export function versionCode(prefix) {
   return p;
 }
 
+// EN is tier 0: the viewer's language (English unless they chose another; see versionTier)
 export const TIER = { EN: 0, UNKNOWN: 1, SUB: 2, DUB: 3 };
 
 // The title itself can say: "Peter Pan (GR AUDIO)", "… دوبله" (Persian: dubbed), "(Ger Sub)".
 const SAYS_DUB = /\((?!EN\b|ENG\b)[A-Z]{2,3} AUDIO\)|\bDUBBED\b|\bDOBLADO\b|\bDUBLADO\b|\bSYNCHRO\b|دوبله|مدبلج/i;
 const SAYS_EN_AUDIO = /\((EN|ENG) AUDIO\)/i;
 
-export function versionTier(rawName) {
+// The languages a catalogue label stands for: "DE" German, "AR-SUBS" Arabic (subtitles), "SC" any of the
+// Nordic ones. Labels that don't name a language (NF, 4K, TOP, AS…) have none.
+const CODE_LANGS = {
+  EN: 'en', UK: 'en', US: 'en', 'AF-EN': 'en', DE: 'de', FR: 'fr', QC: 'fr', ES: 'es', LA: 'es', IT: 'it', TR: 'tr', RU: 'ru',
+  PL: 'pl', CZ: 'cs', HU: 'hu', PT: 'pt', BR: 'pt', GR: 'el', NL: 'nl', 'BE-NL': 'nl', SE: 'sv', DK: 'da', NO: 'no', IS: 'is',
+  FI: 'fi', SC: 'sv da no', AL: 'sq', RO: 'ro', BG: 'bg', HR: 'hr', SR: 'sr', SI: 'sl', EX: 'sh', IL: 'he', IR: 'fa',
+  KU: 'ku', PH: 'fil', PK: 'ur', BN: 'bn', AR: 'ar', IN: 'hi', 'IN-TL': 'te', 'IN-TU': 'ta', 'IN-MM': 'ml', 'IN-KN': 'kn',
+  'IN-PI': 'pa', 'IN-GU': 'gu', 'IN-EN': 'hi', 'SO-IN': '', 'SO-EN': '',     // IN-EN: English films dubbed into Hindi
+};
+export function codeLangs(code) {
+  const c = versionCode(code);
+  const v = c in CODE_LANGS ? CODE_LANGS[c] : CODE_LANGS[c.split('-')[0]] || '';
+  return v ? v.split(' ') : [];
+}
+
+const SAYS_AUDIO = /\(([A-Z]{2,3}) AUDIO\)/i;
+// -> the languages a version is labelled with (its "(XX AUDIO)" note, else its catalogue prefix)
+export function versionLangs(rawName) {
+  const a = String(rawName || '').match(SAYS_AUDIO);
+  if (a) return a[1].toUpperCase() === 'ENG' ? ['en'] : codeLangs(a[1].toUpperCase());
+  const m = String(rawName || '').match(FILM_PREFIX);
+  return m ? codeLangs(m[1]) : [];
+}
+
+// A viewer's language other than English ('de', 'el', 'ar'…): the same four tiers, seen from there -
+// 0 that language (dubbed or subtitled), 1 unlabelled, 2 English or another subtitled catalogue
+// (likely the original audio), 3 another language's dub. For 'en' the rules above, unchanged.
+export function versionTier(rawName, want = 'en') {
+  if (want && want !== 'en') {
+    const langs = versionLangs(rawName);
+    if (langs.includes(want)) return TIER.EN;
+    const t = englishTier(rawName);
+    if (t === TIER.UNKNOWN && !langs.length) return TIER.UNKNOWN;
+    return t === TIER.DUB ? TIER.DUB : TIER.SUB;
+  }
+  return englishTier(rawName);
+}
+
+// Languages the provider's catalogue carries, with how many titles: [[code, count], …], largest first.
+export function catalogueLangs(lists, min = 1) {
+  const n = new Map();
+  for (const list of lists) {
+    for (const it of list.items) for (const l of versionLangs(it.name)) n.set(l, (n.get(l) || 0) + 1);
+  }
+  return [...n].filter(([, c]) => c >= min).sort((a, b) => b[1] - a[1]);
+}
+
+let names = null;
+const OWN_NAMES = { sh: 'Serbo-Croatian (Ex-Yu)' };          // the provider's EX catalogue
+export function langName(code) {
+  if (OWN_NAMES[code]) return OWN_NAMES[code];
+  try { names = names || new Intl.DisplayNames(['en'], { type: 'language' }); return names.of(code) || code; } catch { return code; }
+}
+
+function englishTier(rawName) {
   if (SAYS_EN_AUDIO.test(rawName)) return TIER.EN;
   if (SAYS_DUB.test(rawName)) return TIER.DUB;
   const m = String(rawName || '').match(FILM_PREFIX);

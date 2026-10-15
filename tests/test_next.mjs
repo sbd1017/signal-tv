@@ -3,7 +3,7 @@
 //   node --test tests/test_next.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { feedLang, feedRegion, orderFeeds, versionTier, versionCode, applyLangPref, rankByLanguage, titleKey, TIER } from '../web-next/static/js/lang.js';
+import { feedLang, feedRegion, orderFeeds, versionTier, versionCode, versionLangs, codeLangs, catalogueLangs, langName, applyLangPref, rankByLanguage, titleKey, TIER } from '../web-next/static/js/lang.js';
 import { windowOf, candidates, eligible, recentIds, remember, rng, stem } from '../web-next/static/js/hero.js';
 import { pickEpisode } from '../web-next/static/js/shuffle.js';
 import { film, parse, teams, caps, twinLabel, cardTitle, eventStatus } from '../web-next/static/js/names.js';
@@ -82,6 +82,36 @@ test('version tiers from provider prefixes', () => {
   assert.equal(versionTier('IR - Practical Magic 2 (2026) جادوی عملی ۲ - دوبله'), TIER.DUB);
   assert.equal(versionTier('IR - Practical Magic 2 (2026) جادوی عملی 2'), TIER.SUB);
   assert.equal(versionTier('AR-CAM - Practical Magic 2 (2026)'), TIER.SUB);
+});
+
+test('a chosen language: its versions first, then unlabelled, then English or subtitled, then other dubs', () => {
+  assert.deepEqual(versionLangs('4K-DE-DV - Dune (2021)'), ['de']);
+  assert.deepEqual(versionLangs('AR-SUBS - Dune'), ['ar']);
+  assert.deepEqual(versionLangs('GR - Peter Pan (GR AUDIO) (1953)'), ['el']);
+  assert.deepEqual(versionLangs('NF - The Family (2017)'), []);
+  assert.deepEqual(codeLangs('SC'), ['sv', 'da', 'no']);                                   // the Nordic catalogue
+  assert.deepEqual(codeLangs('EN-TOP'), ['en']);
+  assert.equal(versionTier('DE - Strung (2026)', 'de'), TIER.EN);
+  assert.equal(versionTier('Plain Title', 'de'), TIER.UNKNOWN);
+  assert.equal(versionTier('NF - The Family (2017)', 'de'), TIER.UNKNOWN);
+  assert.equal(versionTier('EN - The Machinist (2004)', 'de'), TIER.SUB, 'English: the original audio, no German');
+  assert.equal(versionTier('GR - Practical Magic 2 (2026)', 'de'), TIER.SUB, 'a subtitled catalogue: original audio');
+  assert.equal(versionTier('FR - Retour à Zombieland (2019)', 'de'), TIER.DUB);
+  assert.equal(versionTier('AR-SUBS - Dune', 'ar'), TIER.EN, 'Arabic subtitles are Arabic');
+  assert.equal(versionTier('GR - Practical Magic 2 (2026)', 'el'), TIER.EN);
+  assert.equal(versionTier('DE - Strung (2026)', 'en'), versionTier('DE - Strung (2026)'), 'English unchanged');
+  // German only: dubs into other languages go, English goes where German exists
+  const de = (it) => { const f = film(it.name); return { tier: versionTier(it.name, 'de'), key: titleKey(f.title, f.year) }; };
+  const items = cat(['EN - Ballerina (2025)', 'FR - Ballerina (2025)', 'DE - Ballerina (2025)', 'EN - Dune (2021)', 'FR - Dune (2021)']);
+  assert.deepEqual(applyLangPref(items, 'only', de).map((x) => x.name), ['DE - Ballerina (2025)', 'EN - Dune (2021)']);
+});
+
+test('the languages a catalogue carries, counted from its labels', () => {
+  const list = { items: cat(['EN - A (2020)', 'EN - B (2020)', 'DE - A (2020)', 'SC - A (2020)', 'NF - C (2020)', 'EX - D (2001)']) };
+  assert.deepEqual(catalogueLangs([list]), [['en', 2], ['de', 1], ['sv', 1], ['da', 1], ['no', 1], ['sh', 1]]);
+  assert.deepEqual(catalogueLangs([list], 2), [['en', 2]]);
+  assert.equal(langName('el'), 'Greek');
+  assert.equal(langName('sh'), 'Serbo-Croatian (Ex-Yu)');
 });
 
 const cat = (names) => names.map((n, i) => ({ id: String(i), name: n }));

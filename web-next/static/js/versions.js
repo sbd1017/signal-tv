@@ -18,9 +18,10 @@ export function matchTitle(raw) {
   return { title: t, year: f.year, prefix: f.prefix, uhd: f.uhd };
 }
 
-// -> the other versions of `item` in `items`, English first (then unknown, foreign-catalogue, dubbed),
-// each { item, tier, label }. `items`: catalogue list items ({ id, name, key, cat, year }).
-export function versionsOf(item, items, cats = new Map()) {
+// -> the other versions of `item` in `items`, the viewer's language first (`want`, English unless they
+// chose another; then unknown, foreign-catalogue, dubbed), each { item, tier, label } - tier always as
+// seen from English (englishVersion relies on it). `items`: catalogue list items ({ id, name, key, cat, year }).
+export function versionsOf(item, items, cats = new Map(), want = 'en') {
   const me = matchTitle(item.name);
   const year = me.year || item.year || 0;
   const needle = fold(me.title).trim();
@@ -38,9 +39,9 @@ export function versionsOf(item, items, cats = new Map()) {
   for (const c of cands) {
     const sameYear = year && c.y ? c.y === year : years.size <= 1;   // undated: only when the dates agree
     if (!sameYear) continue;
-    out.push({ item: c.it, tier: versionTier(c.it.name), label: label(c.it.name) });
+    out.push({ item: c.it, tier: versionTier(c.it.name), rank: versionTier(c.it.name, want), label: label(c.it.name) });
   }
-  out.sort((a, b) => a.tier - b.tier || a.label.localeCompare(b.label));
+  out.sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
   disambiguate([{ item, label: label(item.name) }, ...out], cats);
   return out;
 }

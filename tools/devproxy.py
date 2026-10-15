@@ -8,6 +8,8 @@ registry (POST /tv-test/api/art/gaps): use it for testing and screenshots, so no
 changes the viewer's favourites, preferences or history, or counts as real use.
 --sidecar-writes lets writes through to the sidecar while /tv/ stays read-only: only for testing the
 gap registry against an isolated sidecar (TV_SIDECAR pointing at a temporary-state instance).
+--classic also serves Classic's page (/tv/) and /tv/static/ from this checkout's web/, so Classic
+changes can be tried against the same backend before a deploy.
 
 /tv-test/... is served from web-next/ (no caching, same CSP as the live site); everything
 under /tv/ (API, artwork, media) is streamed through to TV_BACKEND (default 127.0.0.1:8790).
@@ -20,6 +22,8 @@ import os
 import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web-next")
+CLASSIC_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web")
+CLASSIC = "--classic" in sys.argv
 BACKEND = os.environ.get("TV_BACKEND", "127.0.0.1:8790")
 SIDECAR = os.environ.get("TV_SIDECAR", "127.0.0.1:8792")              # tvnext: /tv-test/img|art|api
 READ_ONLY = "--read-only" in sys.argv
@@ -71,6 +75,8 @@ class H(http.server.BaseHTTPRequestHandler):
             self.proxy(SIDECAR)
         elif path.startswith("/tv-test/"):
             self.static(path[len("/tv-test/"):] or "index.html")
+        elif CLASSIC and (path == "/tv/" or path.startswith("/tv/static/")) and self.command in ("GET", "HEAD"):
+            self.static(path[len("/tv/"):] or "index.html", CLASSIC_ROOT)
         elif path.startswith("/tv/"):
             if READ_ONLY and self.command not in ("GET", "HEAD"):
                 self.send_error(403, "read-only preview: synced state is not changed")
@@ -79,9 +85,9 @@ class H(http.server.BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
-    def static(self, rel):
-        full = os.path.realpath(os.path.join(ROOT, rel))
-        if not full.startswith(os.path.realpath(ROOT) + os.sep) or not os.path.isfile(full):
+    def static(self, rel, root=ROOT):
+        full = os.path.realpath(os.path.join(root, rel))
+        if not full.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(full):
             self.send_error(404)
             return
         with open(full, "rb") as f:
