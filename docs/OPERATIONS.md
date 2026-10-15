@@ -2,9 +2,9 @@
 
 A browser player for live TV, movies and series. It is built for iPhone Safari (and works as a home-screen app), iPad, and macOS Safari/Chrome.
 
-**Two interfaces.** The new interface (`web-next/`, previewed at `/tv-test`) is the primary product:
-all normal development targets it. Classic (`web/`, what `/tv` serves today) is kept as a legacy
-fallback, with no feature parity; it gets only critical, security or compatibility fixes and the
+**Two interfaces.** The new interface (`web-next/`, the default at `/tv` since 2026-10-15) is the
+primary product: all normal development targets it. Classic (`web/`, still selectable per device in
+Settings) is kept as a legacy fallback, with no feature parity; it gets only critical, security or compatibility fixes and the
 shared backend's changes. Policy, and what to keep in mind so Classic can be retired later:
 [docs/INTERFACES.md](docs/INTERFACES.md).
 
@@ -530,15 +530,15 @@ Anything done there (favourites, progress, last channel) is real synced state, a
 
 ### Both interfaces at /tv (classic and new)
 
-Prepared, not live yet. Once deployed, `/tv` offers both: each device chooses in Settings
+Live since 2026-10-15, with `new` as the default. `/tv` offers both: each device chooses in Settings
 (**Interface**: Automatic / New / Classic, remembered on that device), and devices that haven't chosen
 get the Pi's default. Both share favourites, progress, recent, last channel and preferences (checked
 both ways), so switching loses nothing.
 
 1. Merge the branch into `main` and deploy as usual (`deploy/install.sh`, then restart the app). The
    deploy also builds the new interface into `/opt/signal-tv-ui/new` (`deploy/build_ui.py`: its files
-   under `/tv/new/static`, the classic ones untouched at `/tv/static` and `/tv/pwa`). The default stays
-   `classic`, so nothing changes for anyone yet. The sidecar must be running
+   under `/tv/new/static`, the classic ones untouched at `/tv/static` and `/tv/pwa`). A first build keeps
+   the default at `classic`. The sidecar must be running
    (`deploy/tv-test/install-next.sh`, as for the preview).
 2. Once: `/opt/signal-tv/deploy/ui-switch.sh setup`. It backs up and installs the `/tv` nginx snippet
    (adds the `/tv/next/` routes for the new interface's artwork; refuses if the live snippet has edits
