@@ -133,7 +133,8 @@ async def scores_index(q: str = ""):
     items = []
     for part in q.split(",")[:40]:
         bits = part.split("|")
-        if len(bits) == 4 and bits[0].startswith("comp:") and ID.match(bits[0]) and all(ID.match(b) and b.startswith("team:") for b in bits[1:3]) \
+        side = lambda x: (x.startswith("team:") and ID.match(x)) or (x.startswith("name:") and 1 < len(x) <= 65)
+        if len(bits) == 4 and (bits[0] == "comp:none" or ID.match(bits[0])) and bits[0].startswith("comp:") and all(side(b) for b in bits[1:3]) \
                 and bits[3].isdigit():
             items.append((bits[0], bits[1], bits[2], int(bits[3])))
     if config.ART_MODE == "remote" or not items:

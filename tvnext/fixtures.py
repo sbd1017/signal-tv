@@ -31,13 +31,15 @@ TTL = 6 * 3600                 # a pair's fixtures are asked again after this (p
 MISS_TTL = 24 * 3600           # a pair TheSportsDB doesn't know is asked again the next day
 LIVE_BEFORE, LIVE_AFTER = 30 * 60, 90 * 60
 REPLAY_GAP, REPLAY_WINDOW = int(2.5 * 3600), 14 * 86400
+# an airing that starts this long after the real kick-off is past the game (football: over 100 minutes)
+GAPS = {sports.FOOTBALL: 100 * 60, sports.BASKETBALL: 150 * 60, sports.NFL: 200 * 60}
 
 
-def verdict(kickoffs: list[int], start: int) -> dict | None:
+def verdict(kickoffs: list[int], start: int, gap: int = REPLAY_GAP) -> dict | None:
     if any(start - LIVE_BEFORE <= k <= start + LIVE_AFTER for k in kickoffs):
         return {"live": True}
-    past = [k for k in kickoffs if start - REPLAY_WINDOW <= k <= start - REPLAY_GAP]
-    if past and not any(start - REPLAY_GAP < k < start + LIVE_AFTER for k in kickoffs):
+    past = [k for k in kickoffs if start - REPLAY_WINDOW <= k <= start - gap]
+    if past and not any(start - gap < k < start + LIVE_AFTER for k in kickoffs):
         return {"replay": True, "played": max(past)}
     return None
 
@@ -79,7 +81,8 @@ class Fixtures:
             p = self.pair(a, b)
             c = self.fresh(p)
             if c:
-                v = verdict(c["k"], start)
+                ent = sports.BY_ID_KEY.get(a)
+                v = verdict(c["k"], start, GAPS.get(ent.sport if ent else 0, REPLAY_GAP))
                 if v:
                     out[f"{a}|{b}|{start}"] = v
             elif p not in self.queued and self.name(a) and self.name(b):

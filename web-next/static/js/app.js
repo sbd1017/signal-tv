@@ -782,7 +782,11 @@ async function loadFixtures(evs) {
   }
   return { found, pending };
 }
+// replays found by the live scores (an airing that started long after the real kick-off): "title|start"
+const scoreReplays = new Map();
 function withFixture(ev) {
+  const r = scoreReplays.get(`${ev.title}|${ev.start}`);
+  if (r) return { ...ev, replay: true, played: r.played };
   const v = fixtureIdx.get(fxKey(ev));
   if (!v) return ev;
   return v.replay ? { ...ev, replay: true, played: v.played } : { ...ev, replay: false, played: 0 };
@@ -1041,8 +1045,15 @@ async function viewSports() {
   // live scores: asked for the live, not-replayed matches on show; then every minute while Sports is open
   const scoreIdx = new Map();                     // "comp|a|b|start" -> {score: {team: '2'}, clock, state, detail}
   let shownLive = [];
-  const scKey = (ev) => (ev.when === 'live' && !ev.replay && ev.comp_id && (ev.teams || []).length === 2
-    ? `${ev.comp_id}|${ev.teams[0]}|${ev.teams[1]}|${ev.start}` : '');
+  // a side: its team id, or the guide's own name for a club the app doesn't know (the Pi matches it by name)
+  const sideToken = (t) => t.id || `name:${String(t.label).replace(/[|,]/g, ' ').trim().slice(0, 60)}`;
+  const SCORE_SPORTS = new Set(['football', 'basketball', 'nfl']);
+  const scKey = (ev) => {
+    if (ev.when !== 'live' || ev.replay || !SCORE_SPORTS.has(ev.sport)) return '';
+    const sides = teamSides(ev);
+    if (!sides || sides.some((t) => !t.id && !t.label)) return '';
+    return `${ev.comp_id || 'comp:none'}|${sideToken(sides[0])}|${sideToken(sides[1])}|${ev.start}`;
+  };
   async function loadScores() {
     if (!scoresOn() || document.hidden) return;
     const keys = [...new Set(shownLive.map(scKey).filter(Boolean))].slice(0, 40);
@@ -1050,7 +1061,16 @@ async function viewSports() {
     try {
       const res = await fetch(`${NEXT}/api/scores?${new URLSearchParams({ q: keys.join(',') })}`, { credentials: 'same-origin' });
       const d = res.ok ? await res.json() : { items: {} };
-      for (const k of keys) { if (d.items[k]) scoreIdx.set(k, d.items[k]); else scoreIdx.delete(k); }
+      let replays = false;
+      for (const k of keys) {
+        const v = d.items[k];
+        if (v && v.replay) {                        // aired after the real game: to Replays, without its score
+          const ev = shownLive.find((e) => scKey(e) === k);
+          if (ev) { scoreReplays.set(`${ev.title}|${ev.start}`, { played: v.played }); replays = true; }
+          scoreIdx.delete(k);
+        } else if (v) scoreIdx.set(k, v); else scoreIdx.delete(k);
+      }
+      if (replays) { paint(); return; }
     } catch { return; }
     for (const li of list.querySelectorAll('.fixture[data-sk]')) paintScore(li, scoreIdx.get(li.dataset.sk));
   }
@@ -1243,7 +1263,7 @@ async function viewSports() {
     const sides = teamSides(ev);
     const name = (t) => { const s = capsSpan(t.label); s.classList.add('fx-name'); return s; };
     const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.id, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }, t.flag), name(t),
-      sk ? h('span', { class: 'fx-score', dataset: { team: t.id || '' }, 'aria-hidden': 'true' }) : null)))
+      sk ? h('span', { class: 'fx-score', dataset: { team: sideToken(t) }, 'aria-hidden': 'true' }) : null)))
       : h('div', { class: 'fx-title' }, capsSpan(ev.title));
     const mainBtn = h('button', { class: 'fx-main', type: 'button', 'aria-label': `Play ${ev.title} on ${best.ch.name}` }, title);
     mainBtn.addEventListener('click', () => playChannel(best.ch));

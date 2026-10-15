@@ -2,10 +2,14 @@
 artwork already uses for some crests). Asked only while a page shows live matches; each league's board
 is fetched at most every 40 s however many devices ask, and a finished board is kept longer.
 
-/api/scores?q=<comp>|<team a>|<team b>|<start>,... -> {"items": {"<that item>": {"score": {<team>: "2", ...},
-"clock": "67'", "state": "in" | "pre" | "post", "detail": "Half Time"}}}. Teams are matched by name with the
-app's own dataset (tvapp/sports.py), so a score is only given when both sides are the same two clubs.
-Replays never ask (the page doesn't), so a score can't spoil one.
+/api/scores?q=<comp>|<side a>|<side b>|<start>,... -> {"items": {"<that item>": {"score": {<side>: "2", ...},
+"clock": "67'", "state": "in" | "pre" | "post", "detail": "Half Time"}}}, or {"replay": true, "played": <kick-off>}.
+A side is a team id ("team:lyon") or, for a club the dataset doesn't know, "name:<the guide's name>"; comp may
+be "comp:none". Where to look: the competition's own board, then ESPN's board of every football match that day.
+Teams by id are matched with the app's own dataset (tvapp/sports.py); names by their words ("Machida" is
+"Machida Zelvia"); both sides must be the same game.
+Spoilers: the page never asks for a replay; and an airing that starts long after the real kick-off (over
+100 minutes for football) is answered "replay", not with the score.
 """
 from __future__ import annotations
 
@@ -24,6 +28,9 @@ ESPN = "https://site.api.espn.com/apis/site/v2/sports"
 UA = {"User-Agent": "tv-scores/1 (personal, non-commercial)"}       # ESPN's firewall refuses agents that carry a URL
 ET = ZoneInfo("America/New_York")                                     # ESPN's scoreboard days
 LIVE_TTL, DONE_TTL = 40, 600
+ALL_FOOTBALL = "soccer/all"                                         # every football match ESPN has that day
+# an airing starting this long after kick-off can't be the live game (the game is over or nearly)
+REPLAY_AFTER = {sports.FOOTBALL: 100 * 60, sports.BASKETBALL: 150 * 60, sports.NFL: 200 * 60}
 
 # competition -> ESPN scoreboard(s). Only competitions ESPN covers; anything else simply has no score.
 SCOREBOARDS = {
@@ -62,41 +69,81 @@ def team_key(team: dict, sport: int) -> str:
     return ""
 
 
-def parse_board(data: dict, sport: int) -> dict[frozenset, dict]:
-    """A scoreboard -> {frozenset({team a, team b}): {"score": {team: str}, "clock", "state", "detail", "start"}}."""
-    out = {}
+def words(name: str) -> frozenset:
+    return frozenset(w for w in sports.norm(name).split() if w not in sports.GENERIC and len(w) > 1)
+
+
+def parse_board(data: dict, sport: int) -> list[dict]:
+    """A scoreboard -> [{"ids": {team id: score}, "names": [(name words, score)] x2, "clock", "state", "detail", "start"}]."""
+    out = []
     for ev in (data or {}).get("events") or []:
         try:
             comp = ev["competitions"][0]
-            sides = {}
+            ids, names = {}, []
             for c in comp["competitors"]:
-                k = team_key(c.get("team") or {}, sport)
-                if not k:
-                    break
-                sides[k] = str(c.get("score") if c.get("score") not in (None, "") else "")
-            if len(sides) != 2:
-                continue
+                team = c.get("team") or {}
+                score = str(c.get("score") if c.get("score") not in (None, "") else "")
+                k = team_key(team, sport)
+                if k:
+                    ids[k] = score
+                variants = [words(team.get(f) or "") for f in ("displayName", "shortDisplayName", "location", "name")]
+                names.append(([v for v in variants if v], score))
             st = ev.get("status") or {}
             typ = st.get("type") or {}
             start = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).timestamp()
-            out[frozenset(sides)] = {"score": sides, "clock": st.get("displayClock") or "", "state": typ.get("state") or "",
-                                     "detail": typ.get("shortDetail") or typ.get("detail") or "", "start": int(start)}
+            out.append({"ids": ids if len(ids) == 2 else {}, "names": names, "clock": st.get("displayClock") or "",
+                        "state": typ.get("state") or "", "detail": typ.get("shortDetail") or typ.get("detail") or "", "start": int(start)})
         except (KeyError, IndexError, ValueError, TypeError):
             continue
     return out
 
 
+def side_words(side: str) -> list[frozenset]:
+    """Our side's names as word sets: a known team's every name, or the guide's own name."""
+    if side.startswith("team:"):
+        ent = sports.BY_ID_KEY.get(side)
+        return [w for w in (words(n) for n in ([ent.name, *ent.names] if ent else [])) if w]
+    w = words(side[5:])
+    return [w] if w else []
+
+
+def names_fit(ours: list[frozenset], theirs: list[frozenset]) -> bool:
+    """Same team by name: one name's words all in the other's ("machida" / "machida zelvia"), a real word among them."""
+    return any((a <= b or b <= a) and any(len(x) >= 4 for x in (a & b)) for a in ours for b in theirs)
+
+
+def find(board: list[dict], a: str, b: str) -> tuple[dict, dict] | None:
+    """The game of these two sides on a board -> (game, {a: score, b: score})."""
+    if a.startswith("team:") and b.startswith("team:"):
+        for g in board:
+            if set(g["ids"]) == {a, b}:
+                return g, {a: g["ids"][a], b: g["ids"][b]}
+    wa, wb = side_words(a), side_words(b)
+    if not wa or not wb:
+        return None
+    hits = []
+    for g in board:
+        if len(g["names"]) != 2:
+            continue
+        (n1, s1), (n2, s2) = g["names"]
+        if names_fit(wa, n1) and names_fit(wb, n2):
+            hits.append((g, {a: s1, b: s2}))
+        elif names_fit(wa, n2) and names_fit(wb, n1):
+            hits.append((g, {a: s2, b: s1}))
+    return hits[0] if len(hits) == 1 else None
+
+
 class Scores:
     def __init__(self, client: httpx.AsyncClient):
         self.client = client
-        self.boards: dict[tuple[str, str], tuple[float, dict]] = {}          # (path, day) -> (fetched, parsed)
+        self.boards: dict[tuple[str, str], tuple[float, list]] = {}          # (path, day) -> (fetched, parsed)
         self.lock = asyncio.Lock()
 
-    async def board(self, path: str, day: str) -> dict:
+    async def board(self, path: str, day: str) -> list:
         hit = self.boards.get((path, day))
         now = time.time()
         if hit:
-            live = any(v["state"] == "in" or (v["state"] == "pre" and v["start"] - now < 3600) for v in hit[1].values())
+            live = any(v["state"] == "in" or (v["state"] == "pre" and v["start"] - now < 3600) for v in hit[1])
             if now - hit[0] < (LIVE_TTL if live else DONE_TTL):
                 return hit[1]
         async with self.lock:                                   # one fetch per board, even with several pages asking
@@ -104,11 +151,12 @@ class Scores:
             if hit and time.time() - hit[0] < LIVE_TTL:
                 return hit[1]
             try:
-                r = await self.client.get(f"{ESPN}/{path}/scoreboard", params={"dates": day}, headers=UA, timeout=10)
+                params = {"dates": day, **({"limit": "1000"} if path == ALL_FOOTBALL else {})}
+                r = await self.client.get(f"{ESPN}/{path}/scoreboard", params=params, headers=UA, timeout=15)
                 parsed = parse_board(r.json() if r.status_code == 200 else {}, SPORT_OF.get(path.split("/")[0], 0))
             except (httpx.HTTPError, ValueError) as e:
                 log.info("scores: %s %s: %s", path, day, e.__class__.__name__)
-                parsed = hit[1] if hit else {}
+                parsed = hit[1] if hit else []
             self.boards[(path, day)] = (time.time(), parsed)
             if len(self.boards) > 200:
                 for k in sorted(self.boards, key=lambda k: self.boards[k][0])[:100]:
@@ -116,16 +164,25 @@ class Scores:
             return parsed
 
     async def ask(self, items: list[tuple[str, str, str, int]]) -> dict:
-        """items: (comp, team a, team b, start). Only pairs ESPN lists that day (ET, as ESPN's boards are)."""
+        """items: (comp, side a, side b, airing start). Only games ESPN lists that day (ET, as its boards are)."""
         out = {}
         for comp, a, b, start in items[:40]:
-            paths = SCOREBOARDS.get(comp)
-            if not paths:
-                continue
+            paths = SCOREBOARDS.get(comp) or ()
+            paths = (paths,) if isinstance(paths, str) else tuple(paths)
+            sport = SPORT_OF.get(paths[0].split("/")[0], sports.FOOTBALL) if paths else sports.FOOTBALL
+            if sport == sports.FOOTBALL:
+                paths += (ALL_FOOTBALL,)                         # the backup: every football game ESPN has that day
             day = datetime.fromtimestamp(start, timezone.utc).astimezone(ET).strftime("%Y%m%d")
-            for path in (paths,) if isinstance(paths, str) else paths:
-                hit = (await self.board(path, day)).get(frozenset((a, b)))
-                if hit and abs(hit["start"] - start) < 4 * 3600:     # this meeting, not another one that day
-                    out[f"{comp}|{a}|{b}|{start}"] = {k: hit[k] for k in ("score", "clock", "state", "detail")}
-                    break
+            for path in paths:
+                got = find(await self.board(path, day), a, b)
+                # this meeting: kick-off up to 4 h after the airing starts, or any time in the day before it
+                if not got or not -4 * 3600 < start - got[0]["start"] < 24 * 3600:
+                    continue
+                game, score = got
+                key = f"{comp}|{a}|{b}|{start}"
+                if start - game["start"] > REPLAY_AFTER.get(sport, 150 * 60):
+                    out[key] = {"replay": True, "played": game["start"]}     # aired after the game: never its score
+                else:
+                    out[key] = {"score": score, "clock": game["clock"], "state": game["state"], "detail": game["detail"]}
+                break
         return out

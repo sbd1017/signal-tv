@@ -581,28 +581,41 @@ class Scores(unittest.TestCase):
 
     def test_board(self):
         b = scores.parse_board(self.BOARD, 1)
-        self.assertEqual(list(b), [frozenset({"team:lyon", "team:crystal-palace"})], "both sides known, or no score")
-        hit = b[frozenset({"team:lyon", "team:crystal-palace"})]
-        self.assertEqual((hit["score"], hit["clock"], hit["state"]), ({"team:lyon": "3", "team:crystal-palace": "2"}, "67'", "in"))
+        game, score = scores.find(b, "team:crystal-palace", "team:lyon")
+        self.assertEqual((score, game["clock"], game["state"]), ({"team:crystal-palace": "2", "team:lyon": "3"}, "67'", "in"))
+        self.assertIsNone(scores.find(b, "team:lyon", "team:arsenal"), "both sides must be the same game")
+        # a club the dataset doesn't know: by the guide's name, against ESPN's names
+        game, score = scores.find(b, "name:Nowhere", "team:arsenal")
+        self.assertEqual(score, {"name:Nowhere": "0", "team:arsenal": "1"})
+        self.assertIsNone(scores.find(b, "name:Nowhere", "team:lyon"), "both sides must be the same game, by name too")
 
     def test_ask(self):
         board = self.BOARD
 
         class Client:
+            urls = []
+
             async def get(self, url, params=None, headers=None, timeout=None):
-                self.url, self.params = url, params
+                self.urls.append((url, params))
                 return SimpleNamespace(status_code=200, json=lambda: board)
         c = Client()
         s = scores.Scores(c)
-        start = int(datetime(2026, 10, 15, 18, 45, tzinfo=timezone.utc).timestamp())      # the airing, before kick-off
-        got = asyncio.run(s.ask([("comp:uefa-europa-league", "team:crystal-palace", "team:lyon", start),
-                                 ("comp:no-such", "team:lyon", "team:crystal-palace", start)]))
-        self.assertEqual(list(got), [f"comp:uefa-europa-league|team:crystal-palace|team:lyon|{start}"])
-        self.assertIn("uefa.europa/scoreboard", c.url)
-        self.assertEqual(c.params, {"dates": "20261015"})
-        late = start + 26 * 3600                                                           # a meeting a day later: not this one
-        self.assertEqual(asyncio.run(s.ask([("comp:uefa-europa-league", "team:lyon", "team:crystal-palace", late)])), {})
-
+        kick = int(datetime(2026, 10, 15, 19, 0, tzinfo=timezone.utc).timestamp())
+        start = kick - 15 * 60                                                             # the airing, before kick-off
+        got = asyncio.run(s.ask([("comp:uefa-europa-league", "team:crystal-palace", "team:lyon", start)]))
+        self.assertEqual(got[f"comp:uefa-europa-league|team:crystal-palace|team:lyon|{start}"]["score"],
+                         {"team:crystal-palace": "2", "team:lyon": "3"})
+        self.assertIn(("https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa/scoreboard", {"dates": "20261015"}), c.urls)
+        # no competition: ESPN's board of every football game that day
+        got = asyncio.run(s.ask([("comp:none", "team:lyon", "team:crystal-palace", start)]))
+        self.assertIn("score", got[f"comp:none|team:lyon|team:crystal-palace|{start}"])
+        self.assertIn(("https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard", {"dates": "20261015", "limit": "1000"}), c.urls)
+        # aired two hours after kick-off: a replay, and never its score
+        late = kick + 2 * 3600
+        got = asyncio.run(s.ask([("comp:uefa-europa-league", "team:lyon", "team:crystal-palace", late)]))
+        self.assertEqual(got[f"comp:uefa-europa-league|team:lyon|team:crystal-palace|{late}"], {"replay": True, "played": kick})
+        # a meeting the next day is not this one
+        self.assertEqual(asyncio.run(s.ask([("comp:uefa-europa-league", "team:lyon", "team:crystal-palace", kick + 30 * 3600)])), {})
 
 if __name__ == "__main__":
     unittest.main()

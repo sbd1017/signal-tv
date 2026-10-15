@@ -616,6 +616,7 @@ TERMS = {
 }
 # Not a live sports programme (kept for search, left out of the Sports view's live lists).
 SHOW_WORDS = ("highlights | highlight | hl | hlts | hls | hoogtepunten | magazine | magazin | review | preview | greatest | classic | classics | "
+              "rescaldo | antevisao | previa | avant match | apres match | nachbericht | vorbericht | "
               "rewind | best of | goals | stories | story | documentary | docu | doku | dokumentation | build up | "
               "buildup | countdown | studio | show | weekly | talk | news | analysis | roundup | round up | "
               "all or nothing | match of the day | motd | goal rush | moments | momenti | momentos | hojdpunkter | "
