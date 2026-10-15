@@ -25,9 +25,26 @@ SNIPPETS=${TV_NGINX_SNIPPETS:-/etc/nginx/snippets}
 SITEMAP=${TV_UI_SITEMAP:-/etc/nginx/conf.d/10-site.conf}
 SYSTEMCTL=${TV_SYSTEMCTL:-systemctl}
 NGINX=${TV_NGINX:-/usr/sbin/nginx}
+SITES_AVAILABLE=${TV_NGINX_SITES:-/etc/nginx/sites-available}
+UNITS=${TV_UNIT_DIR:-/etc/systemd/system}
+BACKUPS=${TV_BACKUP_DIR:-/var/backups}
+ENV_OWNER=${TV_ENV_OWNER-root:signal-tv}
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 RESERVED=" tv tv-test next new pwa static api m bets home media go convert pokemon admin login "
 OWNER_MAP='    "~^POST:/tv/api/family/[a-z0-9-]+/(passphrase|signout)$" 1;   # Signal TV: Settings > Family sites'
+
+add_map_line() {  # add_map_line LINE: into the site's method map, after the /tv state line (once)
+  $SUDO python3 - "$SITEMAP" "$1" <<'PY'
+import sys
+path, line = sys.argv[1], sys.argv[2]
+text = open(path).read()
+anchor = '"~^POST:/tv/api/state(/import)?$" 1;'
+if line.strip() not in text:
+    i = text.index(anchor)
+    j = text.index("\n", i) + 1
+    open(path, "w").write(text[:j] + line + "\n" + text[j:])
+PY
+}
 
 site_val() { sed -n "s/^$2=//p" "$FAM/$1.site" | head -1; }
 names() { for f in "$FAM"/*.site; do [ -e "$f" ] && basename "$f" .site; done; return 0; }
@@ -62,7 +79,7 @@ build() {
 
 nginx_install() {  # nginx_install NAME PORT: the snippet, the owner's include and the method-map lines; restored if nginx -t fails
   local name=$1 port=$2 stamp b snip="$SNIPPETS/signal-tv-family-$1.conf"
-  stamp=$(date -u +%Y%m%dT%H%M%SZ); b=/var/backups/nginx-tv-family-$stamp
+  stamp=$(date -u +%Y%m%dT%H%M%SZ); b=$BACKUPS/nginx-tv-family-$stamp
   $SUDO install -d -m 0700 "$b"
   $SUDO cp -a "$SITEMAP" "$SNIPPETS/signal-tv.conf" "$b/"
   # the owner's /tv snippet gains the include line; only ever add to it (refuse if it has edits the repo lacks)
@@ -73,8 +90,8 @@ nginx_install() {  # nginx_install NAME PORT: the snippet, the owner's include a
   sed -e "s/@NAME@/$name/g" -e "s/@PORT@/$port/g" "$SRC/deploy/signal-tv-family.conf" | $SUDO tee "$snip" >/dev/null
   $SUDO chmod 0644 "$snip"
   local line="    \"~^POST:/$name/(api/(state(/import)?|login|logout)|next/api/art/gaps)\$\" 1;   # Signal TV family site $name"
-  $SUDO grep -qF "POST:/$name/" "$SITEMAP" || $SUDO sed -i "/\"~^POST:\/tv\/api\/state(\/import)?\$\" 1;/a\\$line" "$SITEMAP"
-  $SUDO grep -qF 'POST:/tv/api/family/' "$SITEMAP" || $SUDO sed -i "/\"~^POST:\/tv\/api\/state(\/import)?\$\" 1;/a\\$OWNER_MAP" "$SITEMAP"
+  $SUDO grep -qF "POST:/$name/" "$SITEMAP" || add_map_line "$line"
+  $SUDO grep -qF 'POST:/tv/api/family/' "$SITEMAP" || add_map_line "$OWNER_MAP"
   if ! $SUDO "$NGINX" -t 2>/dev/null; then
     $SUDO cp -a "$b/$(basename "$SITEMAP")" "$SITEMAP"; $SUDO cp -a "$b/signal-tv.conf" "$SNIPPETS/signal-tv.conf"; $SUDO rm -f "$snip"
     echo "nginx -t failed: restored from $b"; $SUDO "$NGINX" -t; exit 1
@@ -88,20 +105,21 @@ add() {
   [[ "$name" =~ ^[a-z0-9][a-z0-9-]{1,29}$ ]] || { echo "usage: family.sh add NAME (lower case letters, digits, -)"; exit 2; }
   case "$RESERVED" in *" $name "*) echo "/$name is taken by something else on the site"; exit 1 ;; esac
   [ ! -e "$FAM/$name.site" ] || { echo "$name exists already (family.sh list)"; exit 1; }
-  if $SUDO grep -rqsE "location[^{]*[ =^~]/$name(/|[ {]|\$)" /etc/nginx/sites-available /etc/nginx/snippets 2>/dev/null; then
+  if $SUDO grep -rqsE "location[^{]*[ =^~]/$name(/|[ {]|\$)" "$SITES_AVAILABLE" "$SNIPPETS" 2>/dev/null; then
     echo "/$name is already used on the site (nginx has a location for it)"; exit 1
   fi
   # the first free port from 8793 (8790 /tv, 8791 demo provider, 8792 artwork sidecar)
-  used=" $(cat "$FAM"/*.site 2>/dev/null | sed -n 's/^TV_PORT=//p' | tr '\n' ' ') "
+  used=" $( (cat "$FAM"/*.site 2>/dev/null || true) | sed -n 's/^TV_PORT=//p' | tr '\n' ' ') "
   port=8793
   while [[ "$used" == *" $port "* ]] || ss -ltn "sport = :$port" 2>/dev/null | grep -q LISTEN; do port=$((port + 1)); done
   $SUDO install -d -m 0755 "$FAM"
   printf 'TV_SITE=%s\nTV_BASE=/%s\nTV_PORT=%s\n' "$name" "$name" "$port" | $SUDO tee "$FAM/$name.site" >/dev/null
   $SUDO chmod 0644 "$FAM/$name.site"
   if [ ! -e "$FAM/$name.env" ]; then
-    $SUDO install -m 0640 -o root -g signal-tv "$SRC/tv.env.example" "$FAM/$name.env"
+    $SUDO install -m 0640 "$SRC/tv.env.example" "$FAM/$name.env"
+    [ -z "$ENV_OWNER" ] || $SUDO chown "$ENV_OWNER" "$FAM/$name.env"
   fi
-  $SUDO install -m 0644 "$SRC/deploy/signal-tv-family@.service" /etc/systemd/system/signal-tv-family@.service
+  $SUDO install -m 0644 "$SRC/deploy/signal-tv-family@.service" "$UNITS/signal-tv-family@.service"
   $SUDO "$SYSTEMCTL" daemon-reload
   build_one "$name"
   nginx_install "$name" "$port"
