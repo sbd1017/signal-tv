@@ -9,6 +9,15 @@ ENV_FILE=/etc/signal-tv/tv.env
 PY=/opt/signal-tv/venv/bin/python
 API=http://127.0.0.1:8790/tv/api
 DEMO_URL=http://127.0.0.1:8791
+FAMILY=/etc/signal-tv-family
+# `iptv family NAME <command>` runs <command> against that family site (deploy/family.sh)
+SITE=${IPTV_SITE:-}
+if [ -n "$SITE" ]; then
+  [ -f "$FAMILY/$SITE.site" ] || { echo "no family site called $SITE (iptv family)"; exit 1; }
+  SERVICE="signal-tv-family@$SITE"
+  ENV_FILE="$FAMILY/$SITE.env"
+  API="http://127.0.0.1:$(sed -n 's/^TV_PORT=//p' "$FAMILY/$SITE.site")/tv/api"
+fi
 
 helper() { sudo env TV_CONFIG="$ENV_FILE" "$PY" -c 'import sys; sys.path.insert(0, "/opt/signal-tv"); from tvapp.cli import main; sys.argv[0] = "iptv"; sys.exit(main())' "$@"; }
 setval() { printf '%s\n' "$2" | helper set "$1"; }
@@ -58,6 +67,11 @@ iptv - manage Signal TV (https://example.com/tv)
   iptv logs [-f] [N]       last N (default 100) log lines; -f to follow
   iptv jobs                active stream jobs (ffmpeg)
   iptv revoke-sessions     sign out every remembered browser/home-screen app
+  iptv family              the family sites (other households' copies at example.com/<name>)
+  iptv family add NAME     create example.com/NAME (its own service, provider, passphrase)
+  iptv family NAME passphrase | signout   set its passphrase (prompted) / sign every device out
+  iptv family NAME status | set-xtream | set-playlist | use-demo | config | logs | restart …
+                           any of the provider and service commands above, for that site
   iptv backup              back up synced state + config + code now (also runs daily; user data then goes to Google Drive)
   iptv backups             list backups and the last Google Drive upload
   iptv ui [status|new|classic]  default interface for devices that haven't chosen one in Settings
@@ -67,14 +81,38 @@ USAGE
 }
 
 cmd=${1:-help}; shift || true
+if [ -n "$SITE" ]; then
+  case "$cmd" in
+    status|show-config|config|set-provider|set-playlist|set-epg|set-xtream|use-demo|refresh|reload|restart|start|stop|logs|jobs) ;;
+    *) echo "iptv family $SITE: '$cmd' is for the main site only"; exit 2 ;;
+  esac
+fi
 case "$cmd" in
+  family)
+    sub=${1:-list}; shift || true
+    case "$sub" in
+      list|add|build|restart) /opt/signal-tv/deploy/family.sh "$sub" "$@" ;;
+      *)
+        name=$sub; action=${1:-status}; shift || true
+        [ -f "$FAMILY/$name.site" ] || { echo "no family site called $name (iptv family)"; exit 1; }
+        case "$action" in
+          passphrase)
+            ask p1 "New passphrase for /$name (input hidden; at least 6 characters)" secret
+            ask p2 "Again" secret
+            [ "$p1" = "$p2" ] || { echo "They don't match."; exit 1; }
+            printf '%s\n' "$p1" | sudo -u signal-tv env TV_STATE_DIR=/var/lib/signal-tv PYTHONPATH=/opt/signal-tv "$PY" -m tvapp.family passphrase "$name"
+            unset p1 p2 ;;
+          signout|clear) sudo -u signal-tv env TV_STATE_DIR=/var/lib/signal-tv PYTHONPATH=/opt/signal-tv "$PY" -m tvapp.family "$action" "$name" ;;
+          *) IPTV_SITE="$name" exec "$0" "$action" "$@" ;;
+        esac ;;
+    esac ;;
   status)
     systemctl --no-pager --lines=0 status "$SERVICE" | sed -n '1,4p' || true
     systemctl is-active --quiet "$DEMO" && echo "demo provider: running" || echo "demo provider: stopped"
     if out=$(curl -fsS --max-time 5 "$API/status" 2>/dev/null); then
       printf '%s' "$out" | "$PY" -c 'import sys; sys.path.insert(0, "/opt/signal-tv"); from tvapp.cli import main; sys.argv[0] = "iptv"; sys.exit(main())' format-status
     else
-      echo "API not answering on 127.0.0.1:8790"
+      echo "API not answering on ${API%/tv/api}"
     fi
     last=$(ls -t /var/backups/signal-tv/signal-tv-*.tar.gz 2>/dev/null | head -1)
     echo "backups:       ${last:-none yet}"

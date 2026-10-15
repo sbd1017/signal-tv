@@ -1,0 +1,68 @@
+# A family site (tvapp/family.py): another household's copy of the app at its own address, with its
+# own provider (/etc/signal-tv-family/<site>.env), state and passphrase. Same code as /tv
+# (/opt/signal-tv); its interface is built for its address in /opt/signal-tv-ui-<site>.
+# Created by `iptv family add <site>` (deploy/family.sh); /etc/signal-tv-family/<site>.site holds
+# TV_SITE, TV_BASE (/<site>) and TV_PORT.
+[Unit]
+Description=Signal TV family site %i
+After=network-online.target signal-tv.service
+Wants=network-online.target
+OnFailure=signal-tv-alert@failed:%n.service
+
+[Service]
+Type=simple
+User=signal-tv
+Group=signal-tv
+WorkingDirectory=/opt/signal-tv
+EnvironmentFile=/etc/signal-tv-family/%i.site
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+Environment=TV_HOST=127.0.0.1 TV_CONFIG=/etc/signal-tv-family/%i.env TV_WEB_DIR=/opt/signal-tv/web
+Environment=TV_LIVE_DIR=/dev/shm/signal-tv-%i TV_UI_DIR=/opt/signal-tv-ui-%i
+# its own passphrase (set by the owner: Settings > Family sites, or `iptv family <site> passphrase`);
+# no classic interface (it only works at /tv); match alerts and failure messages are the owner's, not theirs
+Environment=TV_AUTH=passphrase TV_CLASSIC=0 TV_ACCESS_FILE=/var/lib/signal-tv/family/%i.json TV_TELEGRAM_FILE=/nonexistent
+ExecStart=/opt/signal-tv/venv/bin/python -m tvapp
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StateDirectory=signal-tv-family/%i
+StateDirectoryMode=0700
+CacheDirectory=signal-tv-family/%i
+CacheDirectoryMode=0700
+UMask=0077
+KillMode=control-group
+TimeoutStopSec=15
+MemoryMax=1536M
+Environment=TV_MEMORY_LIMIT_MB=1536
+TasksMax=256
+# the owner's own site gets the CPU first when video is being converted for several people at once
+CPUWeight=50
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=signal-tv-%i
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/dev/shm
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

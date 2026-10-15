@@ -549,6 +549,32 @@ both ways), so switching loses nothing.
    ("TV", same id and scope, same remembered sign-in); on iPhone it keeps its own Settings choice,
    separate from Safari's.
 
+## Family sites (other households)
+
+Other households can have their own copy of the app at their own address (for example `/mumtv`),
+each with **its own provider subscription**, favourites, history and settings, and **one
+passphrase** that you set. They see the new interface only (no Classic); match alerts and failure
+messages stay yours. Code: `tvapp/family.py`; one copy of the code runs them all.
+
+- **Create one**: `iptv family add NAME` (deploy/family.sh): its settings in
+  `/etc/signal-tv-family/NAME.site` (address, port) and `NAME.env` (its provider, 0640), its service
+  `signal-tv-family@NAME`, its nginx snippet (`snippets/signal-tv-family-NAME.conf`, included from
+  `snippets/signal-tv.conf`) and method-map line (nginx -t first; restored if it fails), its interface
+  built for `/NAME` in `/opt/signal-tv-ui-NAME`.
+- **Its provider**: `iptv family NAME set-xtream` (or `set-playlist`, `use-demo`, `config`); every
+  provider/service command works this way (`iptv family NAME status`, `logs`, `restart`, …).
+- **Its passphrase**: in your own **Settings › Family sites** on `/tv` (works from a phone: change it,
+  or sign everyone out), or `iptv family NAME passphrase` / `signout`. Stored as a scrypt hash in
+  `/var/lib/signal-tv/family/NAME.json`; a new one signs every device there out. Until one is set the
+  site only says it isn't ready. Wrong guesses: 5 per address per 15 minutes, 40 per site per hour.
+- **Sign-in**: the site's own passphrase page (no browser pop-up), then a 30-day session cookie for
+  that address only. nginx sends `/NAME/` to the app's `/tv/`; the artwork sidecar answers
+  `/NAME/next/` for signed-in devices (auth_request) and fetches that site's own logos.
+- **Updates**: `deploy/install.sh` builds every family site's interface too; then restart them with
+  the main app: `sudo systemctl restart signal-tv; /opt/signal-tv/deploy/family.sh restart`.
+- **Load**: each copy uses ~0.5-0.8 GB; video conversion is shared CPU (the main site gets priority,
+  `CPUWeight`); remote viewers all stream through this connection's upload.
+
 ## Demo provider
 
 `signal-tv-demo.service` serves the following on loopback only:

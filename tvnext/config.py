@@ -5,6 +5,16 @@ from pathlib import Path
 STATE = Path(os.environ.get("TVN_STATE", "/var/lib/signal-tv-next"))       # durable: sports artwork library
 CACHE = Path(os.environ.get("TVN_CACHE", "/var/cache/signal-tv-next"))     # regenerable: image derivatives
 BACKEND = os.environ.get("TVN_BACKEND", "http://127.0.0.1:8790")            # the live app (read only)
+# family sites (tvapp/family.py): "<base>/next" -> that copy's own app, for its channel logos and posters
+FAMILY_DIR = Path(os.environ.get("TVN_FAMILY_DIR", "/etc/signal-tv-family"))
+
+
+def family_sites() -> dict[str, str]:
+    from tvapp import family
+    return {f"{s['base']}/next": f"http://127.0.0.1:{s['port']}" for s in family.sites(FAMILY_DIR)}
+
+
+SITES = family_sites()
 IMG_CACHE_MAX_MB = int(os.environ.get("TVN_IMG_CACHE_MAX_MB", "1500"))      # derivatives, pruned oldest-first
 RESIZE_WORKERS = int(os.environ.get("TVN_RESIZE_WORKERS", "2"))             # concurrent resizes (Pi: 4 cores)
 # cached: use the library, acquire missing artwork in the background (default)

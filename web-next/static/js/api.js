@@ -1,6 +1,8 @@
 // JSON API client + catalogue cache + small DOM helpers.
 
 export const BASE = '/tv/api';
+// a family site's build (deploy/build_ui.py sets it): its own passphrase, no classic interface, no owner tools
+export const FAMILY = false;
 export const STATIC = '/tv-test/static';      // this build's own assets; the API is shared with /tv
 // The sidecar (tvnext: resized artwork, sports crests, artwork gaps). deploy/build_ui.py rewrites it
 // for the /tv build, where nginx serves the sidecar under /tv/next/ behind /tv's own login.
@@ -28,7 +30,11 @@ export async function api(path, { signal, timeout = 45000 } = {}) {
   } finally {
     clearTimeout(timer);
   }
-  if (res.status === 401) throw new ApiError('Your login has expired - reload the page to sign in again.', 401);
+  if (res.status === 401) {
+    // a family site's session ended (new passphrase, or everyone signed out): its passphrase page
+    if (FAMILY) location.reload();
+    throw new ApiError('Your login has expired - reload the page to sign in again.', 401);
+  }
   let body = null;
   try { body = await res.json(); } catch { /* empty */ }
   if (!res.ok) throw new ApiError((body && body.error) || `Server error (${res.status})`, res.status, body);

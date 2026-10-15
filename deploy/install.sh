@@ -18,9 +18,11 @@ sudo "$DST/venv/bin/pip" install --quiet --disable-pip-version-check -r "$DST/re
 sudo install -m 0755 "$SRC/deploy/iptv" /usr/local/bin/iptv
 # both interfaces, ready for /tv (which one it serves is kept: deploy/ui-switch.sh, `iptv ui`)
 "$DST/deploy/ui-switch.sh" build
+# and for each family site, at its own address (deploy/family.sh)
+"$DST/deploy/family.sh" build
 # anything else to do after a deploy (e.g. refresh a published copy of the code): the executables in
 # post-deploy.d, each given this checkout's path; one that fails is reported, the deploy still counts
 for hook in /usr/local/etc/signal-tv/post-deploy.d/*; do
   if [ -x "$hook" ]; then "$hook" "$SRC" || echo "post-deploy hook $hook failed" >&2; fi
 done
-echo "Deployed $(git -C "$SRC" describe --always --dirty 2>/dev/null || echo '?') to $DST. Restart: sudo systemctl restart signal-tv"
+echo "Deployed $(git -C "$SRC" describe --always --dirty 2>/dev/null || echo '?') to $DST. Restart: sudo systemctl restart signal-tv; $DST/deploy/family.sh restart"

@@ -1011,3 +1011,11 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Settings > Family sites (the owner's own site) */
+.family-site { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+.family-site:first-of-type { border-top: 0; }
+.family-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.family-head a { color: var(--muted); font-size: 13px; }
+.family-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.family-actions .input { flex: 1 1 180px; min-width: 0; }

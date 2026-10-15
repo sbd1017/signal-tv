@@ -5,6 +5,8 @@
     build_ui.py --base /tv      OUT     the live app, beside the classic interface: its own files under
                                         /tv/new/static (served by signal-tv from <ui_dir>/new), the
                                         sidecar under /tv/next/ (behind /tv's own login)
+    build_ui.py --base /mumtv   OUT     a family site (tvapp/family.py): as /tv, at its own address -
+                                        its API, files, video player and sidecar all under /mumtv/
 
 The source (web-next/) is written for /tv-test. For /tv the build rewrites, in this order:
     NEXT = '/tv-test'  (api.js: the sidecar)   -> '/tv/next'
@@ -31,6 +33,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TEXT = {".html", ".js", ".css", ".webmanifest"}
+NAMES = [('"name": "TV (test)"', '"name": "TV"'), ('"short_name": "TV test"', '"short_name": "TV"'),
+         (" - redesign preview", ""), ('name="apple-mobile-web-app-title" content="TV test"', 'name="apple-mobile-web-app-title" content="TV"')]
+FAMILY_BASE = re.compile(r"^/[a-z0-9][a-z0-9-]{0,30}$")
+
+
+def rewrites(base: str) -> list[tuple[str, str]]:
+    if base in REWRITE:
+        return REWRITE[base]
+    if not FAMILY_BASE.match(base):
+        raise ValueError(f"unknown base {base}")
+    b = base                                                   # a family site: everything at its own address
+    return [("NEXT = '/tv-test';", f"NEXT = '{b}/next';"), ("/tv-test/static", f"{b}/new/static"), ("/tv-test/pwa", f"{b}/pwa/new"),
+            ("/tv-test/", f"{b}/"), ("'/tv/api'", f"'{b}/api'"), ("'/tv/static/vendor/", f"'{b}/static/vendor/"),
+            ("export const FAMILY = false;", "export const FAMILY = true;"), *NAMES]
+
+
 REWRITE = {
     "/tv-test": [],
     "/tv": [("NEXT = '/tv-test';", "NEXT = '/tv/next';"), ("/tv-test/static", "/tv/new/static"), ("/tv-test/pwa", "/tv/pwa/new"),
@@ -50,8 +68,8 @@ def version(src: Path) -> str:
 
 
 def build(base: str, out: Path, src: Path = ROOT / "web-next", classic: Path = ROOT / "web") -> str:
-    if base not in REWRITE:
-        raise ValueError(f"unknown base {base}")
+    rules = rewrites(base)
+    live = base != "/tv-test"                               # /tv or a family site: the classic files beside it
     v = version(src)
     stage = Path(tempfile.mkdtemp(prefix="ui-", dir=out.parent))
     try:
@@ -62,22 +80,24 @@ def build(base: str, out: Path, src: Path = ROOT / "web-next", classic: Path = R
             if not f.is_file() or f.suffix not in TEXT:
                 continue
             text = f.read_text(encoding="utf-8")
-            for a, b in REWRITE[base]:
+            for a, b in rules:
                 text = text.replace(a, b)
             text = text.replace("__V__", v)
-            if base == "/tv":                               # the classic interface's files: their own version
-                for rel in set(re.findall(r"/tv/static/([A-Za-z0-9._/-]+)\?v=" + v, text)):
+            if live:                                        # the classic interface's files (hls.js): their own version
+                for rel in set(re.findall(re.escape(base) + r"/static/([A-Za-z0-9._/-]+)\?v=" + v, text)):
                     f2 = classic / "static" / rel
                     if f2.is_file():
-                        text = text.replace(f"/tv/static/{rel}?v={v}", f"/tv/static/{rel}?v={hashlib.sha256(f2.read_bytes()).hexdigest()[:10]}")
+                        text = text.replace(f"{base}/static/{rel}?v={v}", f"{base}/static/{rel}?v={hashlib.sha256(f2.read_bytes()).hexdigest()[:10]}")
             f.write_text(text, encoding="utf-8")
             rel = f.relative_to(stage)
             if "__V__" in text:
                 problems.append(f"{rel}: unstamped __V__")
-            if base == "/tv" and PREVIEW_WORDS.search(text):
+            if live and PREVIEW_WORDS.search(text):
                 problems.append(f"{rel}: preview wording left: {PREVIEW_WORDS.search(text).group()!r}")
-            if base == "/tv" and "/tv-test" in text:
+            if live and "/tv-test" in text:
                 problems.append(f"{rel}: /tv-test left: {text[text.index('/tv-test') - 30:text.index('/tv-test') + 30]!r}")
+            if base not in REWRITE and ("'/tv/api'" in text or "'/tv/static/" in text):
+                problems.append(f"{rel}: a /tv path left in a family site's build")
         problems += missing_assets(stage, base, classic)
         if problems:
             raise SystemExit("build_ui: refused\n  " + "\n  ".join(problems))
@@ -98,7 +118,7 @@ def missing_assets(stage: Path, base: str, classic: Path) -> list[str]:
     static/ and pwa/ (the preview), or for /tv its static/ under /tv/new and the classic interface's
     /tv/static and /tv/pwa."""
     where = ({f"{base}/new/static/": stage / "static", f"{base}/pwa/new/": stage / "pwa", f"{base}/static/": classic / "static"}
-             if base == "/tv" else {f"{base}/static/": stage / "static", f"{base}/pwa/": stage / "pwa"})
+             if base != "/tv-test" else {f"{base}/static/": stage / "static", f"{base}/pwa/": stage / "pwa"})
     ref = re.compile("(" + "|".join(re.escape(k) for k in sorted(where, key=len, reverse=True)) + r")([A-Za-z0-9._/-]+)")
     out = []
     for f in [stage / "index.html", *(stage / "static" / "js").glob("*.js")]:
@@ -115,9 +135,11 @@ def missing_assets(stage: Path, base: str, classic: Path) -> list[str]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--base", required=True, choices=sorted(REWRITE))
+    ap.add_argument("--base", required=True, help="/tv-test, /tv, or a family site's /<name>")
     ap.add_argument("out", type=Path)
     a = ap.parse_args(argv)
+    if a.base not in REWRITE and not FAMILY_BASE.match(a.base):
+        ap.error(f"--base: /tv-test, /tv or /<name>, not {a.base}")
     a.out.parent.mkdir(parents=True, exist_ok=True)
     print(build(a.base, a.out.resolve()))
     return 0

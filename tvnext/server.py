@@ -21,7 +21,7 @@ from . import config, fixtures, images, sportsart
 log = logging.getLogger("tvnext")
 IMMUTABLE = "private, max-age=31536000, immutable"
 ID = re.compile(r"^(team|comp):[a-z0-9-]{1,60}$")
-PREFIXES = ("/tv-test", "/tv/next")          # the preview, and the live interface (deploy/build_ui.py)
+PREFIXES = ("/tv-test", "/tv/next", *config.SITES)   # the preview, the live interface, the family sites (deploy/build_ui.py)
 GAP_ID = re.compile(r"^(team|comp|name):[\w -]{1,60}$")
 
 
@@ -80,7 +80,8 @@ async def _housekeeping():
 async def image(variant: str, key: str, request: Request):
     webp = "image/webp" in request.headers.get("accept", "") or "image/*" in request.headers.get("accept", "")
     try:
-        path, ext = await images.get(variant, key, webp, S.client)
+        site = next((p for p in config.SITES if request.url.path.startswith(p + "/")), None)     # a family site's own logos
+        path, ext = await images.get(variant, key, webp, S.client, config.SITES[site] if site else None)
     except images.Refused as e:
         return Response(f"refused: {e}", status_code=422, media_type="text/plain", headers={"Cache-Control": "no-store"})
     except httpx.HTTPError:

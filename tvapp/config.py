@@ -80,6 +80,12 @@ def system_timezone() -> str:
     return tz if re.fullmatch(r"[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+){0,2}", tz) else ""
 
 
+def _base(value: str) -> str:
+    """'/mumtv' - one path segment, lower case; anything else falls back to /tv."""
+    v = "/" + value.strip().strip("/")
+    return v if re.fullmatch(r"/[a-z0-9][a-z0-9-]{0,30}", v) else "/tv"
+
+
 def _num(env: dict, key: str, default: float) -> float:
     try:
         return float(env.get(key) or default)
@@ -114,6 +120,15 @@ class Settings:
     # the guide's home time zone (IANA name): the new interface shows times in it unless a device
     # chooses its own (a browser that reports UTC for privacy would show the guide an hour off)
     timezone: str = ""
+    # Where browsers reach this copy of the app (nginx maps <base>/ to the app's own /tv/), and how it
+    # is protected: "nginx" (the site's login in front, the owner's /tv) or "passphrase" (a family
+    # site: one passphrase, checked here, set by the owner - tvapp/family.py).
+    base: str = "/tv"
+    auth: str = "nginx"
+    site: str = ""                          # a family site's name ("mumtv"); "" for the owner's own
+    access_file: Path | None = None          # the family site's passphrase record (written by the owner's app)
+    classic: bool = True                     # offer the classic interface (needs the /tv base: not on family sites)
+    family_dir: Path = Path("/etc/signal-tv-family")   # the owner's app: <site>.site files describing each family site
 
     @property
     def configured(self) -> bool:
@@ -149,4 +164,10 @@ def load() -> Settings:
         public_origin=os.environ.get("TV_PUBLIC_ORIGIN", "https://example.com"),
         memory_limit_mb=int(_num(os.environ, "TV_MEMORY_LIMIT_MB", 2048)),
         timezone=system_timezone(),
+        base=_base(os.environ.get("TV_BASE", "/tv")),
+        auth="passphrase" if os.environ.get("TV_AUTH", "").strip() == "passphrase" else "nginx",
+        site=re.sub(r"[^a-z0-9-]", "", os.environ.get("TV_SITE", "").lower())[:30],
+        access_file=Path(os.environ["TV_ACCESS_FILE"]) if os.environ.get("TV_ACCESS_FILE") else None,
+        classic=os.environ.get("TV_CLASSIC", "1") != "0",
+        family_dir=Path(os.environ.get("TV_FAMILY_DIR", "/etc/signal-tv-family")),
     )

@@ -24,6 +24,9 @@ BACKEND = os.environ.get("TV_BACKEND", "127.0.0.1:8790")
 SIDECAR = os.environ.get("TV_SIDECAR", "127.0.0.1:8792")              # tvnext: /tv-test/img|art|api
 READ_ONLY = "--read-only" in sys.argv
 SIDECAR_WRITES = "--sidecar-writes" in sys.argv
+# --family mumtv=127.0.0.1:8793: a family site (tvapp/family.py) as nginx serves it - /mumtv/next/ to the
+# sidecar, the rest to that app with /mumtv/ mapped onto its /tv/, marked as coming from outside
+FAMILY = dict(a.split("=", 1) for a in sys.argv[sys.argv.index("--family") + 1:] if "=" in a) if "--family" in sys.argv else {}
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
        "media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; font-src 'self'; "
        "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
@@ -51,7 +54,12 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def route(self):
         path = self.path.split("?", 1)[0]
-        if path in ("/", "/tv-test"):
+        site = next((n for n in FAMILY if path.startswith(f"/{n}/")), None)
+        if site and path.startswith(f"/{site}/next/"):
+            self.proxy(SIDECAR)
+        elif site:
+            self.proxy(FAMILY[site], "/tv/" + self.path[len(site) + 2:], {"X-Forwarded-For": self.client_address[0]})
+        elif path in ("/", "/tv-test"):
             self.send_response(308)
             self.send_header("Location", "/tv-test/")
             self.send_header("Content-Length", "0")
@@ -87,13 +95,13 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def proxy(self, upstream):
+    def proxy(self, upstream, path=None, extra=None):
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n) if n else None
-        headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
+        headers = {**{k: v for k, v in self.headers.items() if k.lower() not in HOP}, **(extra or {})}
         conn = http.client.HTTPConnection(upstream, timeout=120)
         try:
-            conn.request(self.command, self.path, body=body, headers=headers)
+            conn.request(self.command, path or self.path, body=body, headers=headers)
             r = conn.getresponse()
         except OSError as e:
             self.send_error(502, f"backend unreachable ({e}) - is the SSH tunnel up?")

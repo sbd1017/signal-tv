@@ -54,18 +54,23 @@ class Keys:
         d = hmac.new(self.key, msg.encode(), hashlib.sha256).digest()[:n]
         return base64.urlsafe_b64encode(d).decode().rstrip("=")
 
-    # ---- session cookie: "<exp hex>.<nonce>.<mac>"
-    def make_cookie(self) -> str:
+    # ---- session cookie: "<exp hex>.<nonce>.<mac>"; gen: a family site's passphrase generation (signed
+    # in, so a new passphrase or "sign everyone out" ends every session). 0: the owner's own site.
+    @staticmethod
+    def _cmsg(exp: int, nonce: str, gen: int) -> str:
+        return f"c:{exp}:{nonce}" + (f":g{gen}" if gen else "")
+
+    def make_cookie(self, gen: int = 0) -> str:
         exp = int(time.time()) + COOKIE_DAYS * 86400
         nonce = secrets.token_hex(6)
-        return f"{exp:x}.{nonce}.{self._mac(f'c:{exp}:{nonce}')}"
+        return f"{exp:x}.{nonce}.{self._mac(self._cmsg(exp, nonce, gen))}"
 
-    def cookie_ok(self, value: str | None) -> tuple[bool, int]:
+    def cookie_ok(self, value: str | None, gen: int = 0) -> tuple[bool, int]:
         m = TOKEN_RE.match(value or "")
         if not m:
             return False, 0
         exp = int(m.group(1), 16)
-        good = hmac.compare_digest(m.group(3), self._mac(f"c:{exp}:{m.group(2)}"))
+        good = hmac.compare_digest(m.group(3), self._mac(self._cmsg(exp, m.group(2), gen)))
         return good and exp > time.time(), exp
 
     # ---- media token: "<exp hex>.<client>.<mac over scope>"

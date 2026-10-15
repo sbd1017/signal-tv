@@ -52,6 +52,28 @@ class Build(unittest.TestCase):
                       "versioned by its own content, not the new build's")
         self.assertFalse((out / "dev").exists(), "development pages stay out")
 
+    def test_family_site_build_is_all_at_its_own_address(self):
+        """A family site (/mumtv): its API, files, video player, sidecar and home-screen app all under
+        /mumtv - nothing reaches /tv, which is behind the owner's own login."""
+        out = self.tmp / "fam"
+        build_ui.build("/mumtv", out)
+        js = "".join(p.read_text() for p in (out / "static" / "js").glob("*.js"))
+        self.assertIn("BASE = '/mumtv/api'", js)
+        self.assertIn("FAMILY = true", js)
+        self.assertIn("NEXT = '/mumtv/next'", js)
+        self.assertIn("STATIC = '/mumtv/new/static'", js)
+        self.assertRegex(js, r"/mumtv/static/vendor/hls\.min\.js\?v=[0-9a-f]{10}")
+        self.assertNotIn("'/tv/api'", js)
+        self.assertNotIn("/tv-test", js)
+        page = (out / "index.html").read_text()
+        self.assertIn("/mumtv/new/static/js/app.js", page)
+        self.assertIn("/mumtv/pwa/new/manifest.webmanifest", page)
+        m = json.loads((out / "pwa" / "manifest.webmanifest").read_text())
+        self.assertEqual((m["scope"], m["start_url"].split("#")[0], m["name"]), ("/mumtv/", "/mumtv/", "TV"))
+        self.assertTrue((out / "pwa" / "login.css").is_file(), "the passphrase page's stylesheet")
+        with self.assertRaises(ValueError):
+            build_ui.build("/Mum TV", self.tmp / "bad")
+
     def test_preview_build_is_the_source_stamped(self):
         out = self.tmp / "test"
         v = build_ui.build("/tv-test", out)

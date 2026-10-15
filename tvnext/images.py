@@ -89,7 +89,7 @@ def render(data: bytes, variant: str, fmt: str = "webp") -> tuple[bytes, dict]:
     return out.getvalue(), {"src": src, "size": im.size}
 
 
-async def get(variant: str, key: str, webp: bool, client: httpx.AsyncClient) -> tuple[Path, str]:
+async def get(variant: str, key: str, webp: bool, client: httpx.AsyncClient, backend: str | None = None) -> tuple[Path, str]:
     """Path of the derivative, making it first if needed. Raises Refused or httpx errors."""
     if variant not in VARIANTS or not KEY.match(key):
         raise Refused("unknown variant or key")
@@ -106,7 +106,7 @@ async def get(variant: str, key: str, webp: bool, client: httpx.AsyncClient) -> 
     fut = asyncio.get_running_loop().create_future()
     _inflight[job] = fut
     try:
-        r = await client.get(f"{config.BACKEND}/tv/api/img/{key}", timeout=30)
+        r = await client.get(f"{backend or config.BACKEND}/tv/api/img/{key}", timeout=30)
         if r.status_code != 200:
             raise Refused(f"source HTTP {r.status_code}")
         t0 = time.perf_counter()

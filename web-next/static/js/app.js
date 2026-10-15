@@ -1,7 +1,7 @@
 // Signal TV "Signal" - app shell, router and views. No framework; all provider text is
 // inserted with textContent (never innerHTML). Shares the API, sync store and player logic
 // with the current interface (web/); only presentation and navigation differ.
-import { api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
+import { BASE, FAMILY, api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
   chunked, toast, fmtClock, fmtDuration, fmtTime, img, imgv, setImg, NEXT, STATIC, fmtDate, sameDay, tzOffset, timeMode, setTimeMode,
   piTimeZone, deviceTimeZone, setPiTimeZone } from './api.js?v=__V__';
 import * as caps from './caps.js?v=__V__';
@@ -899,8 +899,9 @@ async function openSportsFavs() {
   q.addEventListener('input', draw);
   box.replaceChildren(h('h2', { id: 'sheet-title', text: 'Teams & competitions' }),
     h('p', { class: 'muted small', text: 'They fill Sports › For you on all your devices, and a star marks their matches everywhere.' }),
-    h('div', { class: 'sfav-alerts' }, h('span', { class: 'small', text: 'Telegram alert before kick-off' }), alerts),
-    h('p', { class: 'muted small', text: 'One message per match, sent by the Pi. Not for replays, youth or women’s games.' }),
+    ...(state.status && state.status.alerts_on === false ? [] : [
+      h('div', { class: 'sfav-alerts' }, h('span', { class: 'small', text: 'Telegram alert before kick-off' }), alerts),
+      h('p', { class: 'muted small', text: 'One message per match, sent by the Pi. Not for replays, youth or women’s games.' })]),
     h('h3', { class: 'sub-title', text: 'Your favourites' }), mine, qField, found);
   draw();
 }
@@ -2316,19 +2317,76 @@ function viewSettings() {
   const tracksBox = h('section', { class: 'panel', id: 'lib-tracks' });
   const uiBox = h('section', { class: 'panel', id: 'lib-interface' });
   const timeBox = h('section', { class: 'panel', id: 'lib-time' });
+  const famBox = h('section', { class: 'panel', id: 'lib-family', hidden: true });
   const backupBox = h('section', { class: 'panel', id: 'lib-backup' });
   const statusBox = h('section', { class: 'panel', id: 'lib-status' });
   const artBox = h('section', { class: 'panel', id: 'lib-artwork' });
   view.replaceChildren(head('Settings', 'Languages and sync are shared by all your devices'),
-    h('div', { class: 'settings' }, tracksBox, uiBox, timeBox, backupBox, statusBox),
+    h('div', { class: 'settings' }, tracksBox, uiBox, timeBox, famBox, backupBox, statusBox),
     h('div', { class: 'settings-group' }, h('h2', { class: 'section-title', text: 'Diagnostics' }),
       h('div', { class: 'settings' }, artBox)));
   renderTrackPrefs(tracksBox);
   renderInterface(uiBox);
   renderTimes(timeBox);
+  renderFamily(famBox);
   renderBackup(backupBox);
   renderStatus(statusBox);
   renderArtwork(artBox);
+  // a family site: no diagnostics (its owner sees them on their own site)
+  loadStatus().then((st) => { if (st && st.site && st.site.auth === 'passphrase') artBox.closest('.settings-group').hidden = true; });
+}
+
+// ---- Family sites (the owner's own site only): the other households' copies of the app, each behind
+// one passphrase. Change it, or sign everyone out, from anywhere - e.g. a phone, when someone texts.
+async function postJSON(path, body) {
+  const res = await fetch(BASE + path, { method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-TV-Sync': '1', Accept: 'application/json' }, body: JSON.stringify(body || {}) });
+  let d = null;
+  try { d = await res.json(); } catch { /* empty */ }
+  if (!res.ok) throw new Error((d && d.error) || `Server error (${res.status})`);
+  return d;
+}
+
+function renderFamily(box) {
+  if (FAMILY) { box.hidden = true; return; }           // only on the owner's own site
+  const draw = async () => {
+    let d;
+    try { d = await api('/family', { timeout: 10000 }); } catch { box.hidden = true; return; }
+    if (!d || !d.sites || !d.sites.length) { box.hidden = true; return; }
+    box.hidden = false;
+    const rows = d.sites.map((s) => {
+      const state = !s.up ? { cls: 'warn', text: 'Not running' }
+        : !s.configured ? { cls: 'warn', text: 'Running · provider not set up yet' }
+          : s.error ? { cls: 'warn', text: `Running · provider problem: ${s.error}` }
+            : { cls: 'ok', text: `Running · ${(s.counts && s.counts.live) ? `${s.counts.live.toLocaleString()} channels` : 'catalogue loading'}${s.streams ? ` · ${s.streams} watching now` : ''}` };
+      const input = h('input', { class: 'input', type: 'text', placeholder: s.passphrase ? 'New passphrase' : 'Set a passphrase', autocomplete: 'off',
+        autocapitalize: 'off', spellcheck: 'false', 'aria-label': `New passphrase for ${s.name}`, enterkeyhint: 'done' });
+      const save = h('button', { class: 'btn small primary', type: 'button', text: 'Save' });
+      const out = h('button', { class: 'btn small ghost', type: 'button', text: 'Sign everyone out', disabled: !s.passphrase });
+      const go = async (fn, done) => {
+        save.disabled = true; out.disabled = true;
+        try { await fn(); toast(done); await draw(); } catch (e) { toast(e.message); save.disabled = false; out.disabled = !s.passphrase; }
+      };
+      const doSave = () => {
+        const v = input.value.trim();
+        if (v.length < 6) { toast('Use at least 6 characters.'); input.focus(); return; }
+        go(() => postJSON(`/family/${s.name}/passphrase`, { passphrase: v }), `${s.name}: new passphrase saved - everyone there signs in again`);
+      };
+      save.addEventListener('click', doSave);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSave(); });
+      out.addEventListener('click', () => {
+        if (confirm(`Sign every device out of ${s.base}? They'll need the passphrase again.`)) go(() => postJSON(`/family/${s.name}/signout`), `${s.name}: everyone signed out`);
+      });
+      return h('div', { class: 'family-site' },
+        h('div', { class: 'family-head' }, h('b', { text: s.name }), h('a', { href: `${s.base}/`, target: '_blank', rel: 'noopener', text: `${location.host}${s.base}` })),
+        h('p', { class: `small ${state.cls === 'warn' ? 'warn' : 'muted'}`, text: state.text }),
+        h('p', { class: 'muted small', text: s.passphrase ? `Passphrase set ${ago(s.changed)}${s.signed_out > s.changed ? ` · everyone signed out ${ago(s.signed_out)}` : ''}.` : 'No passphrase yet: nobody can open it until you set one.' }),
+        h('div', { class: 'family-actions' }, input, save, out));
+    });
+    box.replaceChildren(h('h2', { text: 'Family sites' }), ...rows,
+      h('p', { class: 'muted small', text: 'A new passphrase signs everyone out of that site; tell them the new one. Your own sign-in here is separate.' }));
+  };
+  draw();
 }
 
 // Times: the Pi's zone (the guide's home) or this device's own. Per device: a laptop abroad can show
@@ -2503,6 +2561,17 @@ function uiChoice() {
   return m ? m[1] : '';
 }
 function renderInterface(box) {
+  if (FAMILY) {                              // a family site: sign this device out
+    const out = h('button', { class: 'btn small', type: 'button', text: 'Sign out of this device' });
+    out.addEventListener('click', async () => {
+      if (!confirm('Sign out of this TV site on this device? You will need the passphrase again.')) return;
+      try { await postJSON('/logout'); } catch { /* signed out already */ }
+      location.reload();
+    });
+    box.replaceChildren(h('h2', { text: 'This device' }),
+      h('p', { class: 'muted small', text: 'Signed in with the passphrase. It stays signed in for 30 days at a time.' }), out);
+    return;
+  }
   const preview = !location.pathname.startsWith('/tv/');
   const head = h('h2', { text: 'Interface' });
   if (preview) {

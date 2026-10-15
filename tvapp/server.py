@@ -29,7 +29,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from starlette.background import BackgroundTask
 
 from . import __version__
@@ -37,7 +37,7 @@ from . import config as cfg
 from .auth import CLIENT_RE, COOKIE, COOKIE_DAYS, Keys
 from .catalog import Catalogue, img_key
 from .lists import ListCache, encode_gz
-from . import alerts, epgsearch, hls, livemeta, memguard, refresh_guard, sports, sportsalerts, tracks
+from . import alerts, epgsearch, family, hls, livemeta, memguard, refresh_guard, sports, sportsalerts, tracks
 from .health import ProviderHealth
 from .providers import ProviderError
 from .streams import Engine
@@ -361,6 +361,8 @@ async def lifespan(app: FastAPI):
     S.engine = Engine(S.settings)
     S.engine.prepare()
     S.keys = Keys(S.settings.state_dir)
+    S.access = family.Access(S.settings.access_file)         # a family site's passphrase record
+    S.throttle = family.Throttle()
     S.state = StateStore(S.settings.state_dir / "state.db")
     S.img_fail, S.img_sem, S.range_ok = {}, asyncio.Semaphore(6), {}
     S.tasks = set()
@@ -394,18 +396,40 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
+# Answered without a session on a family site: media (signed tokens), the home-screen files, the
+# passphrase form's own endpoints, and the session check nginx itself asks (it decides from the cookie).
+OPEN_PATHS = ("/tv/m/", "/tv/pwa/", "/tv/api/login", "/tv/api/auth-check", "/tv/api/health")
+
+
+def set_session(response: Response, gen: int = 0) -> None:
+    response.set_cookie(COOKIE, S.keys.make_cookie(gen), max_age=COOKIE_DAYS * 86400, path=f"{S.settings.base}/",
+                        secure=True, httponly=True, samesite="lax")
+
+
 @app.middleware("http")
 async def session_cookie(request: Request, call_next):
-    response = await call_next(request)
     path = request.url.path
+    if S.settings.auth == "passphrase":
+        # a family site: everything but OPEN_PATHS needs this site's passphrase session. Direct loopback
+        # requests (the artwork sidecar fetching images) never come through nginx, which always sets
+        # X-Forwarded-For, so they can't be faked from outside.
+        if not path.startswith(OPEN_PATHS) and not direct_local(request):
+            ok, _ = S.keys.cookie_ok(request.cookies.get(COOKIE), S.access.gen())
+            if not ok:
+                if path in ("/tv", "/tv/"):
+                    return login_page(request)
+                if path.startswith("/tv/api/"):
+                    return err(request, 401, "Signed out. Reload the page to sign in again.")
+                return Response("Signed out", status_code=401, media_type="text/plain")
+        return await call_next(request)
+    response = await call_next(request)
     if path.startswith("/tv/m/") or path.startswith("/tv/pwa/"):
         return response
     # nginx sets this header (from $remote_user) only when Basic Auth succeeded.
     if request.headers.get("x-tv-auth-user"):
         ok, exp = S.keys.cookie_ok(request.cookies.get(COOKIE))
         if not ok or exp - time.time() < 7 * 86400:
-            response.set_cookie(COOKIE, S.keys.make_cookie(), max_age=COOKIE_DAYS * 86400, path="/tv/",
-                                secure=True, httponly=True, samesite="lax")
+            set_session(response)
     return response
 
 
@@ -436,6 +460,8 @@ def ui_default() -> str:
 
 
 def ui_for(request: Request) -> str:
+    if not S.settings.classic:
+        return "new"                           # a family site: the classic interface only works at /tv
     choice = request.cookies.get(UI_COOKIE)
     if choice == "new" and new_ui():
         return "new"
@@ -444,6 +470,9 @@ def ui_for(request: Request) -> str:
 
 @app.get("/tv/")
 async def shell(request: Request):
+    if not S.settings.classic and not new_ui():
+        return Response("Being updated - try again in a minute.", status_code=503, media_type="text/plain",
+                        headers={"Retry-After": "30", "Cache-Control": "no-store"})
     root = new_ui() if ui_for(request) == "new" else S.settings.web_dir
     return FileResponse(root / "index.html", media_type="text/html; charset=utf-8",
                         headers={"Cache-Control": "no-store", "Content-Security-Policy": CSP,
@@ -453,8 +482,143 @@ async def shell(request: Request):
 # ------------------------------------------------------------------- auth
 @app.get("/tv/api/auth-check")
 async def auth_check(request: Request):
-    ok, _ = S.keys.cookie_ok(request.cookies.get(COOKIE))
+    gen = S.access.gen() if S.settings.auth == "passphrase" else 0
+    ok, _ = S.keys.cookie_ok(request.cookies.get(COOKIE), gen)
     return Response(status_code=204 if ok else 401)
+
+
+# ---- a family site's passphrase page (TV_AUTH=passphrase). A plain form: no script needed, and the
+# page's only other files are public (/tv/pwa/new/: its stylesheet and the tv. mark).
+LOGIN_ERRORS = {"1": "That passphrase isn’t right.", "2": "Too many tries. Wait a few minutes and try again.",
+                "3": "This site isn’t ready yet. Ask for the passphrase again later."}
+
+
+def login_page(request: Request) -> Response:
+    from html import escape
+    b = S.settings.base
+    e = request.query_params.get("e", "")
+    if not S.access.is_set():
+        e = "3"
+    msg = LOGIN_ERRORS.get(e, "")
+    page = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark"><meta name="theme-color" content="#0b0c0e"><meta name="robots" content="noindex">
+<title>TV</title><link rel="icon" href="{b}/pwa/new/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{b}/pwa/new/apple-touch-icon.png"><link rel="manifest" href="{b}/pwa/new/manifest.webmanifest">
+<link rel="stylesheet" href="{b}/pwa/new/login.css"></head>
+<body><main class="login"><img class="mark" src="{b}/pwa/new/icon.svg" alt="tv." width="72" height="72">
+<form method="post" action="{b}/api/login"><label for="p">Passphrase</label>
+<input id="p" name="passphrase" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" required autofocus>
+<button type="submit">Open</button>
+{f'<p class="msg" role="alert">{escape(msg)}</p>' if msg else '<p class="hint">You only need this once on each device.</p>'}
+</form></main></body></html>"""
+    return HTMLResponse(page, status_code=200 if not msg or e == "3" else 401,
+                        headers={"Cache-Control": "no-store", "Content-Security-Policy": CSP, "X-Content-Type-Options": "nosniff",
+                                 "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"})
+
+
+def visitor(request: Request) -> str:
+    return (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (request.client.host if request.client else "?")
+
+
+@app.post("/tv/api/login")
+async def login(request: Request):
+    b = S.settings.base
+    if S.settings.auth != "passphrase":
+        return Response(status_code=404)
+    # the site sends Referrer-Policy: no-referrer, so a browser's own form posts carry Origin: null; only a
+    # named other origin is refused (the worst a forged login could do is sign someone in, not read anything)
+    origin = request.headers.get("origin")
+    if origin and origin != "null" and origin != S.settings.public_origin and urlsplit(origin).netloc != request.headers.get("host", ""):
+        return Response(status_code=403)
+    ip = visitor(request)
+    if S.throttle.blocked(ip):
+        return RedirectResponse(f"{b}/?e=2", status_code=303)
+    body = await request.body()
+    if len(body) > 1024:
+        return Response(status_code=413)
+    from urllib.parse import parse_qs
+    phrase = (parse_qs(body.decode("utf-8", "replace")).get("passphrase") or [""])[0]
+    if not S.access.is_set():
+        return RedirectResponse(f"{b}/?e=3", status_code=303)
+    if not phrase or not await asyncio.to_thread(S.access.verify, phrase):
+        S.throttle.failed(ip)
+        log.info("family site %s: wrong passphrase", S.settings.site or b)
+        return RedirectResponse(f"{b}/?e=1", status_code=303)
+    S.throttle.passed(ip)
+    log.info("family site %s: a device signed in", S.settings.site or b)
+    resp = RedirectResponse(f"{b}/", status_code=303)
+    set_session(resp, S.access.gen())
+    return resp
+
+
+@app.post("/tv/api/logout")
+async def logout(request: Request):
+    if S.settings.auth != "passphrase" or not write_allowed(request):
+        return Response(status_code=404 if S.settings.auth != "passphrase" else 403)
+    resp = Response(status_code=204)
+    resp.delete_cookie(COOKIE, path=f"{S.settings.base}/")
+    return resp
+
+
+@app.get("/tv/api/health")
+async def health(request: Request):
+    """For the owner's Family sites panel, on loopback only: is this copy up, and set up."""
+    if not direct_local(request):
+        return Response(status_code=404)
+    c = S.cat.status()
+    return jresp(request, {"site": S.settings.site, "base": S.settings.base, "configured": S.settings.configured,
+                           "counts": c.get("counts", {}), "updated": c.get("updated", 0), "error": c.get("error", ""),
+                           "passphrase": S.access.is_set(), "streams": len(S.engine.stats() or [])})
+
+
+# ---- the owner's Family sites (Settings): list, set a passphrase, sign everyone out. Only on the
+# owner's own site (behind its login); writes need our page's JSON + header like every state write.
+@app.get("/tv/api/family")
+async def family_list(request: Request):
+    if S.settings.auth != "nginx":
+        return Response(status_code=404)
+    out = []
+    for site in family.sites(S.settings.family_dir):
+        rec = family.read_record(family.record_path(S.settings.state_dir, site["name"]))
+        info = {**site, "passphrase": "pass" in rec, "changed": rec.get("changed", 0), "signed_out": rec.get("signed_out", 0),
+                "up": False}
+        try:
+            r = await S.http.get(f"http://127.0.0.1:{site['port']}/tv/api/health", timeout=2)
+            if r.status_code == 200:
+                h = r.json()
+                info.update(up=True, configured=h.get("configured"), counts=h.get("counts"), updated=h.get("updated"),
+                            error=h.get("error"), streams=h.get("streams"))
+        except (httpx.HTTPError, ValueError):
+            pass
+        out.append(info)
+    return jresp(request, {"sites": out})
+
+
+@app.post("/tv/api/family/{name}/{action}")
+async def family_change(name: str, action: str, request: Request):
+    if S.settings.auth != "nginx" or action not in ("passphrase", "signout"):
+        return Response(status_code=404)
+    if not write_allowed(request):
+        return err(request, 403, "Not allowed")
+    if name not in {s["name"] for s in family.sites(S.settings.family_dir)}:
+        return err(request, 404, "No such family site")
+    path = family.record_path(S.settings.state_dir, name)
+    if action == "signout":
+        await asyncio.to_thread(family.sign_out_all, path)
+        log.info("family site %s: everyone signed out (by the owner)", name)
+        return jresp(request, {"ok": True})
+    try:
+        body = await read_json(request)
+    except StateError as e:
+        return err(request, 400, str(e))
+    phrase = body.get("passphrase") if isinstance(body, dict) else None
+    problem = family.check_passphrase(phrase)
+    if problem:
+        return err(request, 400, problem)
+    await asyncio.to_thread(family.set_passphrase, path, phrase)
+    log.info("family site %s: new passphrase set (by the owner); everyone signed out", name)
+    return jresp(request, {"ok": True})
 
 
 # -------------------------------------------------------------- catalogue
@@ -464,8 +628,10 @@ async def status(request: Request):
     st["jobs"] = S.engine.stats()
     st["app"] = __version__
     st["tz"] = S.settings.timezone
+    st["site"] = {"name": S.settings.site, "base": S.settings.base, "auth": S.settings.auth}
+    st["alerts_on"] = S.alerts.configured                # match alerts can be sent (Telegram set up)
     st["limits"] = {"live": S.settings.max_live, "vod": S.settings.max_vod}
-    st["ui"] = {"new": bool(new_ui()), "default": ui_default(), "this": ui_for(request)}
+    st["ui"] = {"new": bool(new_ui()), "default": ui_default(), "this": ui_for(request), "classic": S.settings.classic}
     st["state"] = await asyncio.to_thread(S.state.summary)
     st["list_cache_kb"] = {k: v >> 10 for k, v in S.lists.sizes().items()}
     st["memory"] = {**{k: v for k, v in memory_usage().items() if k != "jobs"}, **S.guard.summary()}
@@ -1087,7 +1253,7 @@ async def play_live(request: Request, item: dict, c: str, rechecked: bool = Fals
             return await play_live(request, item, c, rechecked=True)
         meta = learned or meta
     tok = S.keys.make_token(f"h:{job.id}", c)
-    return jresp(request, {"kind": "live", "mode": "hls", "job": job.id, "url": f"/tv/m/{tok}/h/{job.id}/index.m3u8",
+    return jresp(request, {"kind": "live", "mode": "hls", "job": job.id, "url": f"{S.settings.base}/m/{tok}/h/{job.id}/index.m3u8",
                            "transcode": job.transcode, "container": container, "quality": quality,
                            "variant": {"id": target["id"], "name": target["name"], "label": livemeta.label(meta) if meta else ""},
                            "notice": d.get("notice", ""), "variants": menu, "meta": meta})
@@ -1128,7 +1294,7 @@ async def play(iid: str, request: Request):
             tok = S.keys.make_token(f"f:{item['id']}", c)
             return jresp(request, {"kind": item["kind"], "mode": "file", "job": None, "offset": 0,
                                    "start": offset, "duration": dur, "tracks": info,
-                                   "url": f"/tv/m/{tok}/f/{item['id']}/stream"})
+                                   "url": f"{S.settings.base}/m/{tok}/f/{item['id']}/stream"})
         job = await S.engine.start_vod(item, c, offset, hevc_ok, a if len(audio) > 1 else None, s)
         if s is not None:
             job.sub_track = subs[s]
@@ -1141,7 +1307,7 @@ async def play(iid: str, request: Request):
         tok = S.keys.make_token(f"h:{job.id}", c)
         return jresp(request, {"kind": item["kind"], "mode": "hls", "job": job.id, "offset": origin,
                                "start": 0, "duration": dur, "transcode": job.transcode, "tracks": info,
-                               "url": f"/tv/m/{tok}/h/{job.id}/{'master.m3u8' if s is not None else 'index.m3u8'}"})
+                               "url": f"{S.settings.base}/m/{tok}/h/{job.id}/{'master.m3u8' if s is not None else 'index.m3u8'}"})
     except RuntimeError as e:
         return err(request, 429, str(e))
     except (OSError, ValueError) as e:
