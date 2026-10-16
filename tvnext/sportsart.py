@@ -106,7 +106,7 @@ _COUNTRIES = {
     "Greece": "olympiacos panathinaikos paok ofi-crete kalamata aris-thessaloniki aek-athens",
     "Cyprus": "apoel nea-salamina omonia-nicosia pafos anorthosis-famagusta",
     "Bosnia and Herzegovina": "borac-banja-luka",
-    "Saudi Arabia": "al-hilal al-nassr al-ittihad al-ahli-saudi",
+    "Saudi Arabia": "al-hilal al-nassr al-ittihad al-ahli-saudi al-riyadh",
     "Qatar": "al-sadd al-gharafa",
     "United Arab Emirates": "shabab-al-ahli al-ain al-wasl al-jazira dubai-basketball",
     "Iraq": "al-shorta air-force-club",

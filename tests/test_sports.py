@@ -157,6 +157,13 @@ class Recognition(unittest.TestCase):
         self.assertEqual(comp("Nogomet - 3. Bundesliga: Fortuna Koln - Stuttgart II"), "comp:3-liga")
         self.assertEqual(comp("Bundesliga: Bayern v Dortmund"), "comp:bundesliga")
         self.assertIsNone(comp("Rugby: Leinster v Munster, Champions Cup"))
+        # the Saudi league by its Croatian and Portuguese names, its clubs by their short names
+        self.assertEqual(comp("Nogomet - Saudijska liga: Riyadh - Hilal"), "comp:saudi-pro-league")
+        self.assertEqual(comp("Liga Arábia Saudita 2026-27 - Al Riyadh x Al-Hilal"), "comp:saudi-pro-league")
+        info = sports.classify("Nogomet - Saudijska liga: Riyadh - Hilal", "", SPORT_CH)
+        self.assertEqual([sports.ENTITIES[t].key for t in info.teams], ["team:al-riyadh", "team:al-hilal"])
+        info = sports.classify("Al Hilal Omdurman vs Sidama Coffee", "", SPORT_CH)
+        self.assertFalse(info and sports.BY_ID_KEY["team:al-hilal"].id in info.teams, "Sudan's Al Hilal is another club")
         # a classic re-shown
         self.assertTrue(sports.classify("Retro EFL Cup 09", "Relive the 2009 League Cup final between Manchester United and Tottenham.",
                                         SPORT_CH).replay)
