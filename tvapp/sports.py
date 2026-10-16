@@ -653,7 +653,8 @@ _HYPHEN = re.compile(r"(?<=[^\W\d_])-(?=[^\W\d_])")
 _PAREN = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 _LABEL = re.compile(r"\s*:\s*(?!\d\d\b)")
 # A side that is a part of an event, never a team: "Race 1 - Jarama", "Heat 2 - Lohéac", "Stage 5"
-_NOT_A_SIDE = re.compile(r"^(race|heat|stage|leg|round|session|practice|qualifying|sprint|semi final|final|run|moto)( \d+)?$")
+_NOT_A_SIDE = re.compile(r"^(race|heat|stage|leg|round|session|practice|qualifying|sprint|semi final|final|run|moto)( \d+)?$"
+                         r"|^[a-z]{1,3} ?\d{1,3}( extra| hd| sd)?$")     # a channel or feed code: "P02 - L2 EXTRA" is no match
 _STAGE = re.compile(r"(?:\d+(?:st|nd|rd|th)\s+(?:test|odi|t20i?|one-day international)|(?:first|second|third|fourth|fifth)\s+test)\s*[:\-–]?\s+", re.I)
 _LEADLIVE = re.compile(r"^\s*(?:live|en vivo|en directo|ao vivo|en direct|direct|diretta)\b\s*[:!|-]?\s*", re.I)
 

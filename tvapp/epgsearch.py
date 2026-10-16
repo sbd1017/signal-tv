@@ -482,6 +482,7 @@ class Index:
                 start = self.occ_start[k]
                 if start < hi:
                     by_key.setdefault(self.sp_key[rec], []).append((start, self.occ_stop[k], self.occ_ch[k], rec))
+        self._merge_short_names(by_key)
         out = []
         for kid, rows in by_key.items():
             rows.sort()
@@ -501,6 +502,37 @@ class Index:
                 whole = whole or any(r[1] - r[0] >= FULL_AIRING for r in cl)
         out.sort(key=lambda e: (-e["score"], e["start"]))
         return out
+
+    def _merge_short_names(self, by_key: dict) -> None:
+        """One guide's short name for a club the others name in full ("Wieczysta" / "Wieczysta Kraków",
+        against the same known opponent): the short key's listings join the full one's (in place).
+        Only when exactly one fuller key fits, so two clubs sharing a word never merge."""
+        def split(key):
+            parts = key.split("|")
+            flags = []
+            while len(parts) > 2 and parts[0] in ("w", "y"):
+                flags.append(parts.pop(0))
+            return (tuple(flags), parts) if len(parts) == 2 else (None, None)
+        full: dict[tuple, list] = {}                     # (flags, known team) -> [(kid, other known team)]
+        loose = []
+        for kid in by_key:
+            flags, sides = split(self.keys[kid])
+            if not sides:
+                continue
+            known = [s for s in sides if s.startswith("team:")]
+            if len(known) == 2:
+                for a, b in ((sides[0], sides[1]), (sides[1], sides[0])):
+                    full.setdefault((flags, a), []).append((kid, b))
+            elif len(known) == 1:
+                name = next(s for s in sides if not s.startswith("team:"))
+                if len(name) >= 4:
+                    loose.append((kid, flags, known[0], set(name.split())))
+        for kid, flags, team, words in loose:
+            fits = [k for k, other in full.get((flags, team), ())
+                    if other in sports.BY_ID_KEY and any(words <= set(n.split()) for n in sports.BY_ID_KEY[other].names)]
+            if len(set(fits)) == 1 and kid in by_key:
+                by_key[fits[0]].extend(by_key.pop(kid))
+                by_key[fits[0]].sort()
 
     def _sport_event(self, key: str, rows: list, now: float, earlier: bool) -> dict:
         recs = Counter(r[3] for r in rows)

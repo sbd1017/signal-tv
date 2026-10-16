@@ -31,6 +31,8 @@ export function parse(raw) {
   s = s.replace(/\s{2,}/g, ' ').trim();
   const sep = /^[\s#=*~_\-–—★☆✦•|>.<+]{3,}/u.test(name) || /^[\s#=*~_\-–—★☆✦•|]+$/u.test(name);
   if (sep) s = s.replace(SEP_EDGE, '').trim();
+  // a provider's marker in front of the name, alone or as its "prefix": "◉: beIN Sp⚽rts 1", "● UK: Sky Sports"
+  if (!sep) s = s.replace(/^[◉●○◎•★☆✦✪▶►]+\s*:?\s*/u, '') || s;
   let prefix = '';
   const m = !sep && s.match(PREFIX);
   if (m && s.length - m[0].length >= 2) { prefix = m[1]; s = s.slice(m[0].length); }

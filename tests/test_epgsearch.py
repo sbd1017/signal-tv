@@ -244,3 +244,16 @@ class XmltvCategories(unittest.TestCase):
             self.assertEqual(len(guide["l_tnt4"][1]), 4)                        # no categories: the row is unchanged
             idx = epgsearch.Index(guide, NOW)
             self.assertEqual([e["title"] for e in idx.search("europa league", NOW)["events"]], ["Arsenal vs Leeds United"])
+
+
+class ShortNames(unittest.TestCase):
+    def test_a_guides_short_name_joins_the_full_listing(self):
+        guide = {"l_a": [row(-0.5, 2, "Ekstraklasa: Wieczysta Kraków vs Raków Częstochowa")],
+                 "l_b": [row(-0.5, 2, "Ekstraklasa: Wieczysta vs Raków Częstochowa")],
+                 "l_c": [row(-0.5, 0.5, "P02 - L2 EXTRA")]}
+        chs = {"l_a": sports.FOOTBALL, "l_b": sports.FOOTBALL, "l_c": sports.FOOTBALL}
+        evs = epgsearch.Index(guide, NOW, channel_sport=chs).sports(NOW, NOW - 6 * H, NOW + 24 * H)
+        matches = [e for e in evs if e["kind"] == "match"]
+        self.assertEqual(len(matches), 1, [e["title"] for e in evs])
+        self.assertEqual(sorted(matches[0]["ids"]), ["l_a", "l_b"])
+        self.assertFalse(any("P02" in e["title"] for e in evs), "a feed code is no match")
