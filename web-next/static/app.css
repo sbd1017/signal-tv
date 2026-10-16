@@ -1051,3 +1051,9 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 @media (hover: none) { .card-fav.fav-btn { opacity: .92; transform: none; width: 30px; height: 30px; } }
 .card-fav.fav-btn.on { color: var(--star); }
 .card .thumb .watched { top: auto; bottom: 16px; }           /* the star has the top corner */
+
+/* a title's page: More like this */
+.dt-like { max-width: 1320px; margin: -40px auto 0; padding: 0 calc(56px + var(--sar)) 90px calc(56px + var(--sal)); }
+.dt-like-title { font: 700 20px/1.2 var(--f-display); margin: 0 0 14px; }
+.like-shelf { grid-auto-columns: 150px; }
+@media (max-width: 760px) { .dt-like { padding: 0 16px 70px; margin-top: -30px; } .like-shelf { grid-auto-columns: 124px; } }

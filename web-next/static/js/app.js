@@ -1924,6 +1924,20 @@ function detailsPage(d0, actions, extras = [], more = []) {
 // Other versions of this title (languages / 4K) and, when this version's description isn't in
 // English, the English version's. Both need the catalogue list (usually already loaded: the page was
 // opened from it); the details page draws first and this fills in.
+// More like this (the Pi's tvapp/similar.py): series by genre, the words their descriptions share and
+// era; films by their genre's categories and era. Same language, one version per title.
+async function moreLikeThis(kind, d, page, list) {
+  let r;
+  try { r = await api(`/similar/${d.id}`, { timeout: 20000 }); } catch { return; }
+  if (parseHash().id !== d.id || !page.isConnected) return;
+  const items = (r.ids || []).map((id) => list.byId.get(id)).filter(Boolean);
+  if (items.length < 3) return;
+  page.querySelector('.dt-like')?.remove();
+  page.append(h('section', { class: 'dt-like' },
+    h('h3', { class: 'dt-like-title', text: 'More like this' }),
+    h('div', { class: 'shelf like-shelf' }, items.map((it) => cardFor(kind, it)))));
+}
+
 const PLOT_PREFS = [['en', 'English when available'], ['orig', 'As the provider sends']];
 const plotPref = () => (store.prefs.get('plotLang', 'en') === 'orig' ? 'orig' : 'en');
 
@@ -1945,6 +1959,7 @@ async function enrichDetails(kind, d, page) {
     slot.replaceChildren(h('h3', { class: 'dt-sub', text: 'Also available' }), chips);
     slot.hidden = false;
   }
+  moreLikeThis(kind, d, page, list);
   const about = page.querySelector('.dt-about');
   if (!about || plotPref() !== 'en' || !versions.foreignPlot(d.name, d.plot)) return;
   const en = versions.englishVersion(vs);

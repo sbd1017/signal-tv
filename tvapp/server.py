@@ -37,7 +37,7 @@ from . import config as cfg
 from .auth import CLIENT_RE, COOKIE, COOKIE_DAYS, Keys
 from .catalog import Catalogue, img_key
 from .lists import ListCache, encode_gz
-from . import alerts, epgsearch, family, hls, livemeta, memguard, refresh_guard, sports, sportsalerts, tracks
+from . import alerts, epgsearch, family, hls, livemeta, memguard, refresh_guard, similar, sports, sportsalerts, tracks
 from .health import ProviderHealth
 from .providers import ProviderError
 from .streams import Engine
@@ -89,6 +89,9 @@ class State:
     last_manual: float = 0.0
     started: float = 0.0
     tasks: set
+    like: similar.Similar = similar.Similar()          # More like this (series index, per catalogue version)
+    like_lock: asyncio.Lock = asyncio.Lock()
+    like_cache: dict = {}
 
 
 S = State()
@@ -146,6 +149,8 @@ async def refresh_all(reason: str) -> None:
     await S.lists.warm(LIST_KINDS)
     await asyncio.to_thread(release_memory)
     await epg_index()
+    async with S.like_lock:                               # More like this: ready before anyone asks
+        await asyncio.to_thread(S.like.prepare, S.cat.data, S.cat.version)
 
 
 def epg_now_gz() -> bytes:
@@ -903,6 +908,27 @@ async def movie(iid: str, request: Request):
         "img": img_key(it.get("img") or info.get("img2", "")), "backdrop": img_key(info.get("backdrop", "")),
         "cat": S.cat.data["cats"]["movie"].get(it.get("cat", ""), ""),
     })
+
+
+@app.get("/tv/api/similar/{iid}")
+async def similar_titles(iid: str, request: Request):
+    """More like this (tvapp/similar.py): ids of up to 18 titles of the same kind."""
+    it = S.cat.by_id.get(iid) if valid_id(iid, "ms") else None
+    if not it or it.get("kind", "series" if iid.startswith("s") else "") not in ("movie", "series"):
+        return err(request, 404, "Not in the catalogue.")
+    key = (S.cat.version, iid)
+    if key not in S.like_cache:
+        if it.get("kind") == "movie":
+            info = await S.cat.movie_details(it)
+            ids = await asyncio.to_thread(similar.Similar.like_film, S.cat.data, it, info.get("genre", ""))
+        else:
+            async with S.like_lock:                       # the index: built once per catalogue version
+                await asyncio.to_thread(S.like.prepare, S.cat.data, S.cat.version)
+            ids = S.like.like_series(iid)
+        if len(S.like_cache) > 500:
+            S.like_cache.clear()
+        S.like_cache[key] = ids
+    return jresp(request, {"ids": S.like_cache[key]}, cache="private, max-age=3600")
 
 
 @app.get("/tv/api/series/{iid}")
