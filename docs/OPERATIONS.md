@@ -88,6 +88,21 @@ Uses `player_api.php` for login and status, then:
 
 Movie details (`get_vod_info`) and series episodes (`get_series_info`) are fetched when first opened, then cached (6–24 h, persisted across restarts). Stream URLs are built server-side as `/{live|movie|series}/user/pass/id.ext`.
 
+### Backup provider
+
+A second subscription (Xtream or M3U) to fall back on for Live TV, added in **Settings › Providers**
+(the owner's login only). The login is checked with the provider before it is saved to
+`<state>/backups.json` (0600), and it is never shown back.
+
+- The catalogue stays the main provider's. Only the backup's live channel list is kept (stream id,
+  name, guide id), refreshed along with the catalogue.
+- A channel is found on the backup by its stream id and name (two logins on one service), then by its
+  guide id, then by its name without quality markers (HD, FHD, 4K, RAW…), and only when one channel fits.
+- A channel that won't start on the main provider plays from the backup instead, and stays on it
+  for 15 minutes so a retry doesn't wait on the broken stream again. On the Live page, **Use Backup**
+  switches by hand (for a stream that starts but stutters).
+- Films and series always play from the main provider.
+
 ### Guide (XMLTV)
 
 - Set by `IPTV_EPG_URL` (`.xml` or `.xml.gz`). For Xtream, it defaults to the panel's `xmltv.php`.
