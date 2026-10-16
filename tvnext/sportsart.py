@@ -869,6 +869,20 @@ def guest_id(sport: str, name: str) -> str | None:
     return f"guest:{sport}--{sl}"[:66] if re.search(r"[a-z]{2}", sl) else None
 
 
+def guest_twin(lib: "Library", gid: str, sport: str, name: str) -> str | None:
+    """A guest with a crest whose name is this one, club words aside ("Kitchee" / "Kitchee SC", "Vissel Kobe" /
+    "Kobe" only when that leaves exactly one): its id, so variants share one crest."""
+    idx = lib.index()
+    if gid in idx:
+        return None
+    want = set(_key(name).split())
+    if not want or not any(len(w) >= 4 for w in want):
+        return None
+    hits = [g for g, rec in lib.guests().items()
+            if g in idx and rec.get("sport") == sport and want <= set(_key(rec.get("name", "")).split())]
+    return hits[0] if len(hits) == 1 else None
+
+
 def guest_entity(lib: "Library", gid: str) -> dict | None:
     g = lib.guests().get(gid)
     if not g:
@@ -1394,6 +1408,14 @@ def missing(lib: Library, events: list[dict] | None = None, kind: str = "", stat
     ents = entities()
     idx, ov, misses = lib.index(), lib.overrides(), lib.misses()
     lib.gaps.reconcile(idx)
+    for g in list(lib.gaps.data.values()):                       # another spelling of a club that has a crest now
+        if g["status"] == "open" and g["id"].startswith(("name:", "guest:")):
+            name = g["name"]
+            sport = g["id"].split(":", 1)[1].split("--")[0] if g["id"].startswith("guest:") else "football"
+            gid = guest_id(sport, name)
+            twin = gid and guest_twin(lib, gid, sport, name)
+            if twin:
+                lib.gaps.resolve(g["id"], f"same club as {twin}")
     lib.gaps.flush()
     seen, unknown = guide_gaps(events or [])
     shown = {g["id"] for g in lib.gaps.data.values()}

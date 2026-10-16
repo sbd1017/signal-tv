@@ -146,8 +146,11 @@ async def art_index(ids: str = "", names: str = "", guests: str = ""):
             continue
         gid = sportsart.guest_id(sport, label)
         if gid and GUEST.match(gid):
-            S.lib.add_guest(gid, label.strip(), sport)
-            gmap[line] = gid
+            # another spelling of a club that already has a crest ("Kitchee" / "Kitchee SC"): that one's
+            same = sportsart.guest_twin(S.lib, gid, sport, label)
+            if not same:
+                S.lib.add_guest(gid, label.strip(), sport)
+            gmap[line] = same or gid
     want = [i for i in dict.fromkeys([*ids.split(","), *resolved.values()]) if ID.match(i)][:300] + list(dict.fromkeys(gmap.values()))
     idx = S.lib.index()
     queued = S.acq.enqueue([i for i in want if i not in idx]) if config.ART_MODE != "remote" else 0

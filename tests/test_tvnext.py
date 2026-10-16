@@ -746,3 +746,11 @@ class ManualArtwork(unittest.TestCase):
         self.lib.store(gid, png(120, 120), {"name": "Kitchee", "source": "thesportsdb", "source_id": "1", "source_url": "u", "match": {}})
         self.lib.gaps.reconcile(self.lib.index())
         self.assertEqual(self.lib.gaps.data["name:Kitchee#crest"]["status"], "resolved")
+
+    def test_name_variants_share_one_crest(self):
+        gid = sportsart.guest_id("football", "Kitchee SC")
+        self.lib.add_guest(gid, "Kitchee SC", "football")
+        self.lib.store(gid, png(120, 120), {"name": "Kitchee SC", "source": "manual", "source_id": "o", "source_url": "", "match": {}})
+        self.assertEqual(sportsart.guest_twin(self.lib, sportsart.guest_id("football", "Kitchee"), "football", "Kitchee"), gid)
+        self.assertIsNone(sportsart.guest_twin(self.lib, sportsart.guest_id("basketball", "Kitchee"), "basketball", "Kitchee"), "own sport only")
+        self.assertIsNone(sportsart.guest_twin(self.lib, sportsart.guest_id("football", "SC"), "football", "SC"))
