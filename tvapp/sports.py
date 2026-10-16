@@ -24,6 +24,7 @@ with sports evidence: "Kramer vs. Kramer" on a film channel is not a match.
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 
 # ------------------------------------------------------------------ sports
@@ -330,16 +331,16 @@ team:aek-athens = AEK Athens | ΑΕΚ ; weak: AEK ; also: basketball
 team:sudtirol = FC Südtirol | Südtirol | Sudtirol | Σουντιρόλ
 
 @club basketball
-team:anadolu-efes = Anadolu Efes | Anadolu Efes Istanbul ; weak: Efes
+team:anadolu-efes = Anadolu Efes | Anadolu Efes Istanbul | Anadolu Efes Stambuł ; weak: Efes
 team:virtus-bologna = Virtus Bologna | Virtus Segafredo Bologna | Βίρτους Μπολόνια
 team:olimpia-milano = Olimpia Milano | EA7 Emporio Armani Milano | Emporio Armani Milano | Armani Milano | AX Armani Exchange Milano | Αρμάνι Μιλάνο ; weak: Armani
 team:baskonia = Baskonia | Saski Baskonia | Baskonia Vitoria-Gasteiz
 team:maccabi-tel-aviv = Maccabi Tel Aviv | Maccabi Playtika Tel Aviv ; weak: Maccabi ; also: football
 team:valencia-basket = Valencia Basket
 team:asvel = LDLC ASVEL | ASVEL | ASVEL Villeurbanne | Villeurbanne | Βιλερμπάν
-team:zalgiris-kaunas = Žalgiris Kaunas | Zalgiris Kaunas | BC Žalgiris ; weak: Žalgiris | Zalgiris
+team:zalgiris-kaunas = Žalgiris Kaunas | Zalgiris Kaunas | BC Žalgiris | Żalgiris Kowno ; weak: Žalgiris | Zalgiris
 team:dubai-basketball = Dubai Basketball | Dubai BC | Ντουμπάι ; weak: Dubai
-team:paris-basketball = Paris Basketball | Paris Basket
+team:paris-basketball = Paris Basketball | Paris Basket ; scoped: Paris
 team:hapoel-tel-aviv = Hapoel Tel Aviv | Hapoel IBI Tel Aviv ; also: football
 team:manresa = BAXI Manresa | Bàsquet Manresa | Manresa | Μανρέσα
 team:derthona = Bertram Derthona | Derthona Tortona | Derthona Basket | Ντερτόνα
@@ -410,23 +411,23 @@ team:tennessee-titans = Tennessee Titans ; scoped: Titans | Tennessee
 team:washington-commanders = Washington Commanders ; scoped: Commanders | Washington
 
 @national any
-team:england = England
-team:scotland = Scotland
-team:wales = Wales | Ουαλία
+team:england = England | Inglaterra | Inghilterra | Angleterre | Engleska | Anglia | Englanti
+team:scotland = Scotland | Escocia | Escócia | Scozia | Ecosse | Škotska | Szkocja | Schottland
+team:wales = Wales | Ουαλία | Gales | País de Gales | Galles | Pays de Galles | Walia
 team:northern-ireland = Northern Ireland
-team:republic-of-ireland = Republic of Ireland | Ireland | Ιρλανδία
-team:france = France | Γαλλία
-team:germany = Germany | Deutschland
-team:spain = Spain | Espana
-team:italy = Italy | Italia
-team:portugal = Portugal
-team:netherlands = Netherlands | Nederland ; weak: Holland
+team:republic-of-ireland = Republic of Ireland | Ireland | Ιρλανδία | Irlanda | Irlande | Irska | Irlandia
+team:france = France | Γαλλία | Francia | França | Francuska | Francja | Frankreich
+team:germany = Germany | Deutschland | Alemania | Alemanha | Germania | Allemagne | Njemačka | Niemcy
+team:spain = Spain | Espana | Espanha | Spagna | Espagne | Španjolska | Hiszpania | Spanien
+team:italy = Italy | Italia | Itália | Italie | Italija | Włochy | Italien
+team:portugal = Portugal | Portogallo | Portugalia
+team:netherlands = Netherlands | Nederland | Países Bajos | Paesi Bassi | Pays-Bas | Nizozemska | Holandia | Niederlande ; weak: Holland
 team:belgium = Belgium | Belgique | Belgie | Βέλγιο | Belgia
-team:brazil = Brazil | Brasil
-team:argentina = Argentina
-team:united-states = United States | USA | USMNT
-team:mexico = Mexico
-team:croatia = Croatia | Hrvatska
+team:brazil = Brazil | Brasil | Brasile | Brésil | Brazylia
+team:argentina = Argentina | Argentine | Argentyna
+team:united-states = United States | USA | USMNT | Estados Unidos | Stati Uniti | États-Unis
+team:mexico = Mexico | Messico | Mexique | Meksyk | Meksiko
+team:croatia = Croatia | Hrvatska | Croacia | Croazia | Croatie | Chorwacja
 team:denmark = Denmark | Danmark | Δανία
 team:sweden = Sweden | Sverige
 team:norway = Norway | Norge
@@ -435,7 +436,7 @@ team:turkey = Turkey | Turkiye
 team:switzerland = Switzerland | Schweiz | Suisse
 team:austria = Austria | Osterreich
 team:morocco = Morocco | Maroc
-team:japan = Japan
+team:japan = Japan | Japón | Japão | Giappone | Japon | Japonia
 team:south-korea = South Korea | Korea Republic
 team:australia = Australia ; weak: AUS
 team:uruguay = Uruguay
@@ -446,8 +447,8 @@ team:nigeria = Nigeria
 team:senegal = Senegal
 team:india = India ; weak: IND
 team:pakistan = Pakistan ; weak: PAK
-team:south-africa = South Africa ; weak: RSA | SA
-team:new-zealand = New Zealand ; weak: NZ
+team:south-africa = South Africa | Sudáfrica | África do Sul | Sudafrica | Afrique du Sud | Južna Afrika ; weak: RSA | SA
+team:new-zealand = New Zealand | Nueva Zelanda | Nova Zelândia | Nuova Zelanda | Nouvelle-Zélande | Novi Zeland | Nowa Zelandia ; weak: NZ
 team:west-indies = West Indies ; weak: WI
 team:sri-lanka = Sri Lanka ; weak: SL
 team:bangladesh = Bangladesh ; weak: BAN
@@ -658,6 +659,10 @@ _TAIL = re.compile(r"\s+(?:\d+(?:st|nd|rd|th)\b|\d+[/.]\d+|\d{4}\b|'\d\d\b|week\
                    r"etapa\b|runda\b|kolo\b|hafta\b|fecha\b|speeldag\b|omgang\b|kierros\b|forduló)",
                    re.I)
 _VS = re.compile(r"\s(?:v|vs|vs\.|v\.|x|@)\s", re.I)
+_BOUT = re.compile(r"^\s*(?:combate|pelea|walka|borba|kampf|bout)\s+", re.I)
+# the date a description gives in brackets ("finaali ( 6.10.2026 )"); a year alone, not a season ("2025/26")
+_DESC_DATE = re.compile(r"\(\s*(\d{1,2})\.(\d{1,2})\.(\d{4})\s*\)")
+_YEAR = re.compile(r"(?<![\d/.\-])((?:19|20)\d\d)(?![\d/\-])")
 _DASH = re.compile(r"\s[-–—/]\s")
 _HYPHEN = re.compile(r"(?<=[^\W\d_])-(?=[^\W\d_])")
 _PAREN = re.compile(r"\([^)]*\)|\[[^\]]*\]")
@@ -990,9 +995,10 @@ def _greek_one(key: str) -> int:
     return next(iter(best)) if len(best) == 1 else -1
 
 
-def resolve_side(side: str, sport: int = 0) -> tuple[int, str, bool]:
+def resolve_side(side: str, sport: int = 0, scoped: bool = True) -> tuple[int, str, bool]:
     """A match side -> (entity id or -1, key text, women). Weak names count here: a whole side.
-    sport: the event's, when known - then that sport's own names come first ("Spurs" in the NBA)."""
+    sport: the event's, when known - then that sport's own names come first ("Spurs" in the NBA);
+    scoped=False leaves those out."""
     words = norm(side).split()
     whole = STRONG.get(" ".join(words)) or WEAK.get(" ".join(words))
     # a team whose own name ends in a women's marker ("Cong An Ha Noi": "noi") keeps it
@@ -1000,7 +1006,7 @@ def resolve_side(side: str, sport: int = 0) -> tuple[int, str, bool]:
     while words and words[-1] in WOMEN_WORDS and not whole:
         words.pop()
     text = " ".join(words)
-    own = SCOPED.get(sport, {})
+    own = SCOPED.get(sport, {}) if scoped else {}
     for cand in (text, " ".join(w for w in words if w not in GENERIC)):
         ids = own.get(cand)
         if ids and len(ids) == 1:
@@ -1043,6 +1049,7 @@ def split_match(title: str) -> tuple[str, str, str, bool] | None:
             d = list(_DASH.finditer(left))
             if d:                                   # "Football - Arsenal v Chelsea"
                 left = left[d[-1].end():]
+        left = _BOUT.sub("", left)                          # "Boxeo: combate Rahman vs Rush"
         right = _DASH.split(right, 1)[0].split(",")[0].split("|")[0]
         right = _TAIL.split(right, 1)[0]
         left = _TAIL.split(left, 1)[0] if dashed else left
@@ -1097,12 +1104,17 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
         or bool(desc) and has_any(norm(desc[:80]).split()[:3], _REPLAY)          # a description that opens "Snimak" / "Replay"
     if re.search(r"\((?:w|women|womens|ž|f|fem)\)", title, re.I):
         info.women = True
-    m = _DATE.search(title)
+    m = _DATE.search(title) or _DESC_DATE.search(desc[:300] if desc else "")
     if m:
         d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
         y = y + 2000 if y < 100 else y
         if 1 <= d <= 31 and 1 <= mo <= 12:
             info.dated = y * 10000 + mo * 100 + d
+    else:
+        # a past year on its own ("5th Test England v India 2025"): the end of that year, so a replay
+        years = [int(y) for y in _YEAR.findall(title)]
+        if years and max(years) < time.gmtime().tm_year:
+            info.dated = max(years) * 10000 + 1231
     info.live = bool(_LEADLIVE.match(title)) or has_any(tw[:2], _LIVE)
     show = has_any(tw, _SHOW)
     term = sport_word(tw)
@@ -1122,6 +1134,13 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
             hint = 0
         a, ka, wa = resolve_side(left, hint)
         b, kb, wb = resolve_side(right, hint)
+        # a city or nickname alone ("Washington") is that league's team only against another known team:
+        # against an unknown side it is a college ("Washington @ Purdue"), and one game keeps one key
+        if (a >= 0) != (b >= 0):
+            if a >= 0 and resolve_side(left, hint, scoped=False)[0] < 0:
+                a, ka, wa = resolve_side(left, 0, scoped=False)
+            if b >= 0 and resolve_side(right, hint, scoped=False)[0] < 0:
+                b, kb, wb = resolve_side(right, 0, scoped=False)
         lw = norm(label).split()
         if not comps and lw:
             comps = [ENTITIES[e] for _, _, e in scan(lw, weak=True) if ENTITIES[e].kind == "competition"]
@@ -1255,6 +1274,10 @@ def _f1_session(words: list[str]) -> str:
 def display_title(info: Info, title: str) -> str:
     """'Arsenal vs Leeds United' for a recognised match; the guide's title otherwise."""
     if info.kind != MATCH:
+        # "Guadalajara Open SF 1 & 2: Guadalajara Open SF 1 & 2" (a guide repeating itself after the colon)
+        head, sep, tail = title.partition(": ")
+        if sep and norm(tail) and norm(head).endswith(norm(tail)):
+            return head
         return title
     a, b = info.teams
 

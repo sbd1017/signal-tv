@@ -164,6 +164,24 @@ class Recognition(unittest.TestCase):
         self.assertEqual([sports.ENTITIES[t].key for t in info.teams], ["team:al-riyadh", "team:al-hilal"])
         info = sports.classify("Al Hilal Omdurman vs Sidama Coffee", "", SPORT_CH)
         self.assertFalse(info and sports.BY_ID_KEY["team:al-hilal"].id in info.teams, "Sudan's Al Hilal is another club")
+        # a college game: "Washington" alone is the Commanders only against another NFL side, so every
+        # channel's listing (NFL channels too) is one game
+        for ch in (sports.NFL, SPORT_CH):
+            info = sports.classify("Washington @ Purdue", "Watch American Football action as Washington takes on Purdue.", ch)
+            self.assertEqual((info.key, info.teams), ("purdue|washington", (-1, -1)), ch)
+        self.assertEqual(sports.classify("Washington @ Dallas", "", sports.NFL).key, "team:dallas-cowboys|team:washington-commanders")
+        # countries and clubs as other languages write them; the fight is not a fighter
+        for title, keys in (("Rugby - WXV 2026 - Canadá x Inglaterra (Direto)", ["team:canada", "team:england"]),
+                            ("Koszykówka mężczyzn: Euroliga - mecz: Żalgiris Kowno - Anadolu Efes Stambuł", ["team:zalgiris-kaunas", "team:anadolu-efes"]),
+                            ("Košarka - Euroleague: Crvena zvezda - Paris", ["team:red-star-belgrade", "team:paris-basketball"])):
+            self.assertEqual([sports.ENTITIES[t].key for t in sports.classify(title, "", SPORT_CH).teams], keys, title)
+        self.assertEqual(sports.classify("Boxeo: combate Rahman vs Rush", "", SPORT_CH).key, "rahman|rush")
+        # last year's match, a final dated in the description: replays; a guide repeating itself after the colon
+        self.assertEqual(sports.classify("5th Test England v India 2025", "", SPORT_CH).dated, 20251231)
+        self.assertEqual(sports.classify("4th T20 England v India", "", SPORT_CH).dated, 0)
+        self.assertEqual(sports.classify("Tennis: ATP 500, Peking", "ATP 500 -turnaus Peking, finaali ( 6.10.2026 ).", SPORT_CH).dated, 20261006)
+        t = "WTA Tour 2026 Guadalajara Open (500) SF 1 & 2: Guadalajara Open (500) SF 1 & 2"
+        self.assertEqual(sports.display_title(sports.classify(t, "", SPORT_CH), t), "WTA Tour 2026 Guadalajara Open (500) SF 1 & 2")
         # a classic re-shown; a recording ("snimak") said only in the description
         self.assertTrue(sports.classify("Barcelona - Valencia", "snimak", SPORT_CH).replay)
         self.assertFalse(sports.classify("Barcelona - Valencia", "Uživo iz Barcelone.", SPORT_CH).replay)
