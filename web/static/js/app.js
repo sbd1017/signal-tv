@@ -1,13 +1,13 @@
 // Signal TV - app shell, router and views. No framework; all provider text is
 // inserted with textContent (never innerHTML).
 import { api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
-  chunked, toast, fmtClock, fmtDuration, fmtTime, img } from './api.js?v=20261016233000';
-import * as caps from './caps.js?v=20261016233000';
-import * as store from './store.js?v=20261016233000';
-import { Player } from './player.js?v=20261016233000';
-import * as tracks from './tracks.js?v=20261016233000';
-import * as lang from './lang.js?v=20261016233000';
-import * as names from './names.js?v=20261016233000';
+  chunked, toast, fmtClock, fmtDuration, fmtTime, img } from './api.js?v=20261017001500';
+import * as caps from './caps.js?v=20261017001500';
+import * as store from './store.js?v=20261017001500';
+import { Player } from './player.js?v=20261017001500';
+import * as tracks from './tracks.js?v=20261017001500';
+import * as lang from './lang.js?v=20261017001500';
+import * as names from './names.js?v=20261017001500';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -259,9 +259,42 @@ async function checkKickoffs(evs) {
   return found;
 }
 const withFixture = (ev) => {
-  const v = fixtureIdx.get(fxKey(ev));
-  return (v && v.replay) || kickoffIdx.get(koKey(ev)) ? { ...ev, replay: true } : ev;
+  let v = fixtureIdx.get(fxKey(ev));
+  if (v && ev.comp_id && v.comp && v.comp !== ev.comp_id) v = null;     // a meeting in another competition is another game
+  // the meeting's competition (ESPN's), where the guide named none
+  const out = v && !ev.comp && v.comp ? { ...ev, comp: v.comp_name, comp_id: v.comp } : ev;
+  return (v && v.replay) || kickoffIdx.get(koKey(ev)) ? { ...out, replay: true } : out;
 };
+
+// Team crests and competition logos from the Pi's own library (the sidecar): asked once for the ids on
+// show, then plain cached images. Nothing is drawn for a team the library has no crest for.
+const artIdx = new Map();                     // id -> {v} | null (asked, none)
+const guestIdx = new Map();                   // "sport|name" (a club the app doesn't list) -> its library id
+const GUEST_SPORTS = new Set(['football', 'basketball', 'nfl', 'mma', 'boxing', 'rugby', 'hockey', 'handball', 'volleyball']);
+const guestLines = (ev) => (GUEST_SPORTS.has(ev.sport) && ev.kind === 'match' && (ev.teams || []).length < 2
+  ? (names.teams(ev.title) || []).map((l) => `${ev.sport}|${l}`) : []);
+async function loadArt(ids, guests = []) {
+  const want = [...new Set(ids)].filter((i) => i && !artIdx.has(i)).slice(0, 300);
+  const gw = [...new Set(guests)].filter((g) => !guestIdx.has(g)).slice(0, 100);
+  if (!want.length && !gw.length) return false;
+  for (const i of want) artIdx.set(i, null);
+  for (const g of gw) guestIdx.set(g, '');
+  try {
+    const res = await fetch(`/tv/next/api/art?${new URLSearchParams({ ids: want.join(','), guests: gw.join('\n') })}`, { credentials: 'same-origin' });
+    const d = res.ok ? await res.json() : { items: {} };
+    for (const [k, v] of Object.entries(d.guests || {})) guestIdx.set(k, v);
+    for (const [k, v] of Object.entries(d.items || {})) artIdx.set(k, v);
+    return Object.keys(d.items || {}).length > 0;
+  } catch { return false; }
+}
+function artImg(id, cls) {
+  const a = id && artIdx.get(id);
+  if (!a) return null;
+  const dir = id.startsWith('comp:') ? 'competitions' : id.startsWith('guest:') ? 'guests' : 'teams';
+  const im = h('img', { class: cls, alt: '', decoding: 'async', loading: 'lazy', src: `/tv/next/art/${dir}/${id.split(':')[1]}/64.webp?v=${a.v}` });
+  im.addEventListener('error', () => im.remove(), { once: true });
+  return im;
+}
 
 // ------------------------------------------------------------------ LIVE
 let guideData = {};
@@ -866,6 +899,8 @@ async function viewSports() {
         'Only channels with a programme guide are listed. Live search finds everything else by name.'));
     }
     list.replaceChildren(...out);
+    loadArt(evs.flatMap((e) => [e.comp_id, ...(e.teams || [])]), evs.flatMap(guestLines))
+      .then((found) => { if (found && state.section === 'sports') paint(); });
   }
 
   // The card's own ☆: favourite its teams / competition in place (names from the catalogue)
@@ -908,12 +943,15 @@ async function viewSports() {
     if (ev.when === 'live') top.append(h('span', { class: `badge ${ev.replay ? 'replay-badge' : 'live-badge'}`, text: ev.replay ? 'REPLAY' : 'LIVE' }));
     else top.append(h('span', { class: `prog-when ${ev.when}`, text: whenText(ev.start, now) }));
     const meta = [ev.comp, ['all', 'foryou'].includes(pick.sport) || !ev.comp ? SPORT_NAMES[ev.sport] : ''].filter(Boolean).join(' · ');
-    if (meta) top.append(h('span', { class: 'sp-comp', text: meta }));
+    if (meta) top.append(artImg(ev.comp_id, 'sp-comp-logo') || '', h('span', { class: 'sp-comp', text: meta }));
     if (ev.replay && ev.when !== 'live') top.append(h('span', { class: 'sp-tag', text: 'Replay' }));
+    // each side: its team's crest, or for a club the app doesn't list, the one the Pi found by its name
+    const sideIds = (ev.teams || []).length === 2 ? ev.teams : guestLines(ev).map((g) => guestIdx.get(g) || (ev.teams || [])[0]);
+    const crests = (sideIds || []).map((t) => artImg(t, 'sp-crest'));
     if (ev.youth) top.append(h('span', { class: 'sp-tag', text: 'Youth' }));
     const ids = [...(ev.teams || []), ev.comp_id].filter(Boolean);
     const main = h('button', { class: 'sp-main', type: 'button', 'aria-label': `Play ${ev.title} on ${best.ch.name}` },
-      top, h('strong', { class: 'sp-title', text: ev.title }),
+      top, h('strong', { class: 'sp-title' }, crests.some(Boolean) ? h('span', { class: 'sp-crests', 'aria-hidden': 'true' }, ...crests.filter(Boolean)) : '', ev.title),
       h('span', { class: 'sp-time muted small' }, `${fmtClock(ev.start)} – ${fmtClock(ev.stop)}`,
         ev.when === 'live' ? progressBar((now - ev.start) / (ev.stop - ev.start), 'thin') : ''),
       h('span', { class: 'sp-best' }, icon('play', 'ico sm'), thumb(best.ch.img, best.ch.name, 'logo sm'),
@@ -1540,12 +1578,18 @@ function viewSettings() {
   const tracksBox = h('section', { class: 'lib-section status-card', id: 'lib-tracks' });
   const uiBox = h('section', { class: 'lib-section status-card', id: 'lib-interface', hidden: true });
   const castBox = h('section', { class: 'lib-section status-card', id: 'lib-cast', hidden: true });
+  const layoutBox = h('section', { class: 'lib-section status-card', id: 'lib-layout' });
+  const provBox = h('section', { class: 'lib-section status-card', id: 'lib-providers', hidden: true });
   const backupBox = h('section', { class: 'lib-section status-card', id: 'lib-backup' });
   const statusBox = h('section', { class: 'lib-section status-card', id: 'lib-status' });
-  view.replaceChildren(viewHead('Settings'), langBox, tracksBox, castBox, uiBox, backupBox, statusBox);
+  const artBox = h('section', { class: 'lib-section status-card', id: 'lib-artwork', hidden: true });
+  view.replaceChildren(viewHead('Settings'), langBox, tracksBox, castBox, layoutBox, uiBox, provBox, backupBox, statusBox, artBox);
   renderCatalogueLang(langBox);
   renderTrackPrefs(tracksBox);
   renderCastPref(castBox);
+  renderLayout(layoutBox);
+  renderProviders(provBox);
+  renderArtwork(artBox);
   renderInterface(uiBox);
   renderBackup(backupBox);
   renderStatus(statusBox);
@@ -1628,6 +1672,220 @@ async function renderCastPref(box) {
     h('label', { class: 'pref-row' }, h('span', { text: 'Show the cast' }), sel),
     h('p', { class: 'muted small', text: 'Who is in the film or episode (with the episode’s guest stars) while the player’s controls are showing. Only this device changes.' }));
   box.hidden = false;
+}
+
+// ------------------------------------------------------------------ layout (per device)
+// A TV or phone that never needs Sports can leave the tab out, and open straight on the page it's used for.
+const LAYOUT_SPORTS = 'tv.layout.sports';
+const LAYOUT_START = 'tv.layout.start';
+const START_PAGES = [['live', 'Live TV'], ['sports', 'Sports'], ['movies', 'Movies'], ['series', 'Series'], ['search', 'Search'], ['continue', 'Continue Watching']];
+const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
+const sportsShown = () => lsGet(LAYOUT_SPORTS, '1') !== '0';
+const startPage = () => {
+  const v = lsGet(LAYOUT_START, 'live');
+  return START_PAGES.some(([k]) => k === v) && (v !== 'sports' || sportsShown()) ? v : 'live';
+};
+function applyLayout() {
+  for (const a of document.querySelectorAll('[data-nav="sports"]')) (a.closest('li') || a).hidden = !sportsShown();
+}
+function renderLayout(box) {
+  const startSel = selectEl('Open on', START_PAGES.filter(([k]) => k !== 'sports' || sportsShown()), startPage(), (v) => {
+    lsSet(LAYOUT_START, v);
+    toast('Saved on this device');
+  });
+  const sportsSel = selectEl('Sports tab', [['1', 'Show'], ['0', 'Hide']], sportsShown() ? '1' : '0', (v) => {
+    lsSet(LAYOUT_SPORTS, v);
+    applyLayout();
+    renderLayout(box);                                    // "Open on" loses or regains Sports
+    toast(v === '0' ? 'Sports tab hidden on this device' : 'Sports tab back on this device');
+  });
+  box.replaceChildren(h('h2', { class: 'section-title', text: 'Layout' }),
+    h('label', { class: 'pref-row' }, h('span', { text: 'Open on' }), startSel),
+    h('label', { class: 'pref-row' }, h('span', { text: 'Sports tab' }), sportsSel),
+    h('p', { class: 'muted small', text: 'Only this device changes. Search still finds sports channels and programmes.' }));
+}
+
+// ------------------------------------------------------------------ providers (the owner's site)
+// A backup subscription for Live TV (tvapp/backups.py): checked with the provider before it is kept on
+// the Pi, never shown again. The section stays hidden where the server doesn't offer it.
+async function postJSON(path, body) {
+  const res = await fetch(`/tv/api${path}`, { method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-TV-Sync': '1', Accept: 'application/json' }, body: JSON.stringify(body || {}) });
+  let d = null;
+  try { d = await res.json(); } catch { /* empty */ }
+  if (!res.ok) throw new Error((d && d.error) || `Server error (${res.status})`);
+  return d;
+}
+async function renderProviders(box) {
+  const st = (await loadStatus()) || {};
+  if (!box.isConnected || !Array.isArray(st.backups)) return;
+  const b = st.backups.find((x) => x && typeof x === 'object');
+  const main = `Main: ${st.provider === 'xtream' ? 'Xtream account' : 'playlist'}${st.configured ? '' : ' (not set up)'}, changed on the Pi (iptv set-xtream).`;
+  const line = b ? `${b.label}: ${b.type === 'xtream' ? 'Xtream account' : 'playlist link'} · ${b.channels ? `${b.channels.toLocaleString()} channels ready` : 'loading its channels…'}${b.error ? ` · ${b.error}` : ''}`
+    : 'No backup yet.';
+  const form = providerForm(() => renderProviders(box));
+  const add = h('button', { class: 'btn small', type: 'button', text: b ? 'Change backup' : 'Add a backup provider' });
+  add.addEventListener('click', () => { form.hidden = !form.hidden; });
+  const rm = b ? h('button', { class: 'btn small ghost', type: 'button', text: 'Remove backup' }) : null;
+  if (rm) {
+    rm.addEventListener('click', async () => {
+      if (!confirm('Remove the backup provider? Channels then play from the main one only.')) return;
+      try { await postJSON('/backup', { remove: true }); toast('Backup removed'); renderProviders(box); } catch (e) { toast(e.message); }
+    });
+  }
+  box.replaceChildren(h('h2', { class: 'section-title', text: 'Providers' }),
+    h('p', { class: 'muted small', text: main }),
+    h('p', { class: `small ${b && b.error ? 'warn' : ''}`, text: line }),
+    h('div', { class: 'row-actions' }, add, rm), form,
+    h('p', { class: 'muted small', text: 'A second subscription to fall back on: a channel that won’t start on the main provider plays from the backup instead, and Live offers “Use Backup” to switch by hand. The catalogue stays the main provider’s.' }));
+  box.hidden = false;
+}
+function providerForm(done) {
+  const field = (label, attrs) => {
+    const inp = h('input', { class: 'input', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'data-lpignore': 'true', 'aria-label': label, ...attrs });
+    return [h('label', { class: 'pref-row' }, h('span', { text: label }), inp), inp];
+  };
+  const [baseRow, base] = field('Server', { type: 'url', placeholder: 'http://example.com:8080', inputmode: 'url' });
+  const [userRow, user] = field('Username', { type: 'text' });
+  const [passRow, pass] = field('Password', { type: 'password' });
+  const [linkRow, link] = field('Playlist link', { type: 'url', placeholder: 'http://…/get.php?username=…', inputmode: 'url' });
+  const msg = h('p', { class: 'small', 'aria-live': 'polite' });
+  const save = h('button', { class: 'btn small primary', type: 'submit', text: 'Check and save' });
+  let kind = 'xtream';
+  const paint = () => { for (const r of [baseRow, userRow, passRow]) r.hidden = kind !== 'xtream'; linkRow.hidden = kind !== 'm3u'; };
+  const kinds = selectEl('Provider type', [['xtream', 'Server + login'], ['m3u', 'Playlist link']], kind, (v) => { kind = v; paint(); msg.textContent = ''; });
+  const form = h('form', { class: 'prov-form', hidden: true, autocomplete: 'off' },
+    h('label', { class: 'pref-row' }, h('span', { text: 'Type' }), kinds), baseRow, userRow, passRow, linkRow,
+    h('div', { class: 'row-actions' }, save, msg),
+    h('p', { class: 'muted small', text: 'Use the details from the provider’s welcome email. They are checked with the provider first, kept only on the Pi, and never shown here again.' }));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    save.disabled = true;
+    msg.className = 'small muted';
+    msg.textContent = 'Checking with the provider…';
+    const body = kind === 'xtream' ? { type: 'xtream', base: base.value, username: user.value, password: pass.value } : { type: 'm3u', url: link.value };
+    try {
+      const d = await postJSON('/backup', { ...body, label: 'Backup' });
+      for (const i of [base, user, pass, link]) i.value = '';
+      const exp = d.check && d.check.expires ? ` The account runs until ${new Date(d.check.expires * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}.` : '';
+      toast('Backup provider accepted');
+      msg.className = 'small';
+      msg.textContent = `Accepted.${exp} Its channels load in the next minute or two.`;
+      setTimeout(done, 4000);
+    } catch (err) {
+      msg.className = 'small warn';
+      msg.textContent = err.message;
+    } finally {
+      save.disabled = false;
+    }
+  });
+  paint();
+  return form;
+}
+
+// ------------------------------------------------------------------ artwork (the Pi's sidecar)
+// The crests and logos the Sports pages had to draw for want of real ones, and adding one by hand: an
+// image from this device (shrunk here first) or a link the Pi fetches. Hidden without the sidecar.
+function renderArtwork(box) {
+  let pick = 'seen';
+  let shownN = 5;
+  let gaps = [];
+  const list = h('ol', { class: 'gap-list' });
+  const more = h('button', { class: 'btn ghost small', type: 'button', hidden: true });
+  const sum = h('p', { class: 'muted small' });
+  const body = h('div', { class: 'art-body', hidden: true },
+    h('label', { class: 'pref-row' }, h('span', { text: 'Show' }),
+      selectEl('Artwork gaps', [['seen', 'Most seen'], ['recent', 'Recent'], ['resolved', 'Resolved']], pick, (v) => { pick = v; shownN = 5; draw(); })),
+    list, more,
+    h('p', { class: 'muted small', text: 'Add one with Add crest: pick an image, or paste the link to one (on Wikipedia: open the crest, then copy the image address). It is kept on the Pi and used on every TV.' }));
+  const toggle = h('button', { class: 'btn ghost small', type: 'button', 'aria-expanded': 'false', text: 'Show gaps' });
+  toggle.addEventListener('click', () => {
+    body.hidden = !body.hidden;
+    toggle.setAttribute('aria-expanded', String(!body.hidden));
+    toggle.textContent = body.hidden ? 'Show gaps' : 'Hide gaps';
+  });
+  const paintRows = () => {
+    const shown = gaps.slice(0, shownN);
+    list.replaceChildren(...(shown.length ? shown.map((g) => {
+      const what = g.type === 'competition' ? 'logo' : 'crest';
+      const add = g.status === 'open' ? h('button', { class: 'btn ghost small', type: 'button', text: `Add ${what}` }) : null;
+      if (add) add.addEventListener('click', () => { add.replaceWith(artworkForm(g, what, () => { toast(`${g.name}: ${what} added`); draw(); })); });
+      return h('li', { class: 'gap' }, h('span', { class: 'gap-n', text: `${g.count}×` }),
+        h('span', { class: 'gap-what' }, h('span', {}, h('b', { text: g.name }), h('span', { class: 'muted', text: ` ${what} · ${ago(Date.parse(g.last_seen) / 1000)}` })),
+          h('span', { class: 'gap-why muted small', text: g.status === 'resolved' ? `Resolved: ${g.resolved_by}` : g.reason }), add));
+    }) : [h('li', { class: 'muted small', text: pick === 'resolved' ? 'Nothing resolved yet.' : 'No gaps recorded.' })]));
+    const rest = gaps.length - shown.length;
+    more.hidden = rest <= 0;
+    more.textContent = `Show ${Math.min(rest, 25)} more`;
+  };
+  more.addEventListener('click', () => { shownN += 25; paintRows(); });
+  const draw = async () => {
+    const q = pick === 'resolved' ? 'state=resolved&sort=recent' : `state=open&sort=${pick}`;
+    try {
+      const r = await fetch(`/tv/next/api/art/gaps?${q}`, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      const c = d.coverage;
+      sum.textContent = `Crests ${c.teams.cached}/${c.teams.of} · logos ${c.competitions.cached}/${c.competitions.of} · ${d.gaps_open} open gap${d.gaps_open === 1 ? '' : 's'}, ${d.gaps_resolved} resolved`;
+      gaps = d.gaps || [];
+      paintRows();
+      box.hidden = false;
+    } catch { box.hidden = true; }
+  };
+  box.replaceChildren(h('h2', { class: 'section-title', text: 'Artwork' }), h('div', { class: 'row-actions' }, sum, toggle), body);
+  draw();
+}
+async function shrinkImage(file) {
+  const src = URL.createObjectURL(file);
+  try {
+    const im = new Image();
+    im.src = src;
+    await im.decode();
+    const w0 = im.naturalWidth || 512;
+    const h0 = im.naturalHeight || 512;
+    for (const max of [256, 192, 128]) {
+      const k = Math.min(1, max / Math.max(w0, h0));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w0 * k));
+      c.height = Math.max(1, Math.round(h0 * k));
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      for (const type of ['image/webp', 'image/png']) {
+        const b = await new Promise((r) => c.toBlob(r, type, 0.92));
+        if (b && b.type === type && b.size < 60000) return b;
+      }
+    }
+  } finally { URL.revokeObjectURL(src); }
+  throw new Error('That image is too detailed to send, even shrunk. Try another.');
+}
+function artworkForm(g, what, done) {
+  const file = h('input', { type: 'file', accept: 'image/*', hidden: true });
+  const choose = h('button', { class: 'btn small', type: 'button', text: 'Choose image' });
+  const url = h('input', { class: 'input', type: 'url', placeholder: 'or paste a link to the image', autocomplete: 'off', 'aria-label': `Link to a ${what} for ${g.name}` });
+  const save = h('button', { class: 'btn small primary', type: 'button', text: 'Save' });
+  const msg = h('span', { class: 'small muted', 'aria-live': 'polite' });
+  const send = async (body, type) => {
+    msg.className = 'small muted';
+    msg.textContent = 'Saving…';
+    save.disabled = true;
+    try {
+      const res = await fetch(`/tv/next/api/art/manual?${new URLSearchParams({ id: g.id, name: g.name })}`, {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': type }, body });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || `Not saved (HTTP ${res.status})`);
+      artIdx.delete(d.id);                            // Sports asks again and draws it
+      done();
+    } catch (e) { msg.className = 'small warn'; msg.textContent = e.message; save.disabled = false; }
+  };
+  choose.addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    try { const b = await shrinkImage(f); await send(b, b.type); } catch (e) { msg.className = 'small warn'; msg.textContent = e.message; }
+  });
+  save.addEventListener('click', () => { if (url.value.trim()) send(JSON.stringify({ url: url.value.trim() }), 'application/json'); else url.focus(); });
+  url.addEventListener('keydown', (e) => { if (e.key === 'Enter') save.click(); });
+  return h('span', { class: 'gap-form' }, choose, url, save, file, msg);
 }
 
 function renderInterface(box) {
@@ -1838,7 +2096,8 @@ store.onChange((changed) => {
 // ------------------------------------------------------------------ boot
 store.startSync();
 window.addEventListener('hashchange', route);
-if (!location.hash) history.replaceState(null, '', '#/live');
+applyLayout();
+if (!location.hash) history.replaceState(null, '', `#/${startPage()}`);
 route();
 loadStatus();
 setInterval(loadStatus, 120000);

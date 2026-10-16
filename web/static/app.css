@@ -569,3 +569,20 @@ h1, h2, h3, p { margin: 0; }
 .pc-text b, .pc-text span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .pc-text em { font-style: normal; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--star); }
 @media (max-width: 760px) { .p-cast { bottom: 88px; } .pc-person { width: 70px; } .pc-face { width: 48px; height: 48px; } }
+
+/* Sports: crests and the competition's logo from the Pi's library */
+.sp-comp-logo { width: 16px; height: 16px; object-fit: contain; flex: none; }
+.sp-crests { display: inline-flex; gap: 4px; vertical-align: -5px; margin-right: 8px; }
+.sp-crest { width: 22px; height: 22px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5)); }
+
+/* Settings: providers and artwork */
+.row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.prov-form { display: grid; gap: 10px; padding: 12px 0 4px; }
+.prov-form[hidden], .prov-form .pref-row[hidden] { display: none; }
+.warn { color: var(--bad, #ff5a5f); }
+.gap-list { display: grid; gap: 10px; margin: 10px 0; padding: 0; list-style: none; }
+.gap { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); gap: 2px 10px; align-items: baseline; font-size: 13.5px; }
+.gap-n { font-weight: 700; text-align: right; color: var(--text-2); }
+.gap-what { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; justify-items: start; }
+.gap-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gap-form .input { flex: 1 1 220px; min-width: 0; }
