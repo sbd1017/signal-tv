@@ -2,6 +2,11 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.7.0 - 2026-10-16
+
+- Add a crest or logo by hand: Settings › Artwork › Add crest (image or link), and iptv artwork add
+- Artwork gaps: a guide name's gap closes once that club's crest is found by name (or added)
+
 ## v1.6.0 - 2026-10-16
 
 - Sports: a guide's short club name joins the full listing; feed codes aren't matches; channel-name markers dropped
