@@ -78,7 +78,7 @@ _COUNTRIES = {
                "derby-county queens-park-rangers birmingham-city portsmouth lincoln-city",
     "Wales": "wrexham",
     "Scotland": "celtic rangers aberdeen heart-of-midlothian motherwell",
-    "Spain": "real-madrid barcelona atletico-madrid athletic-club real-sociedad real-betis sevilla valencia-cf villarreal celta-vigo "
+    "Spain": "real-madrid barcelona atletico-madrid athletic-club real-sociedad real-betis sevilla valencia-cf villarreal celta-vigo racing-santander "
              "girona osasuna getafe rayo-vallecano mallorca espanyol elche deportivo-la-coruna malaga levante alaves baskonia valencia-basket manresa",
     "Italy": "juventus inter-milan ac-milan napoli as-roma lazio atalanta fiorentina bologna torino como venezia udinese cagliari "
              "genoa sassuolo parma lecce monza frosinone sudtirol virtus-bologna olimpia-milano derthona",

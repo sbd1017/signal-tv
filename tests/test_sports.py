@@ -164,7 +164,11 @@ class Recognition(unittest.TestCase):
         self.assertEqual([sports.ENTITIES[t].key for t in info.teams], ["team:al-riyadh", "team:al-hilal"])
         info = sports.classify("Al Hilal Omdurman vs Sidama Coffee", "", SPORT_CH)
         self.assertFalse(info and sports.BY_ID_KEY["team:al-hilal"].id in info.teams, "Sudan's Al Hilal is another club")
-        # a classic re-shown
+        # a classic re-shown; a recording ("snimak") said only in the description
+        self.assertTrue(sports.classify("Barcelona - Valencia", "snimak", SPORT_CH).replay)
+        self.assertFalse(sports.classify("Barcelona - Valencia", "Uživo iz Barcelone.", SPORT_CH).replay)
+        info = sports.classify("LaLiga: Real Racing Club - Valencia", "", SPORT_CH)
+        self.assertEqual(sports.ENTITIES[info.teams[0]].key, "team:racing-santander")
         self.assertTrue(sports.classify("Retro EFL Cup 09", "Relive the 2009 League Cup final between Manchester United and Tottenham.",
                                         SPORT_CH).replay)
 
@@ -307,6 +311,10 @@ class Endpoint(unittest.TestCase):
         self.assertEqual(top["channels"][0]["id"], "l_tnt1")                 # 4K HEVC known smooth here: first
         self.assertTrue(top["channels"][0]["label"].startswith("4K 50fps"))
         self.assertEqual(d["counts"]["football"], 2)                         # the match and its replay
+        # each event's importance goes to the page: it ranks Live now by it (without it every card tied
+        # and the earliest kick-off was featured)
+        self.assertTrue(all(isinstance(e["score"], int) for e in d["events"]))
+        self.assertGreater(top["score"], min(e["score"] for e in d["events"]))
         no_hevc = self.c.get("/tv/api/sports", params={"caps": "avc.1080.60.s"}).json()["events"][0]
         self.assertNotEqual(no_hevc["channels"][0]["id"], "l_tnt1")         # a 4K HEVC feed isn't first without HEVC
         self.assertEqual(self.c.get("/tv/api/sports", params={"day": "tomorrow"}).status_code, 200)

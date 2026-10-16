@@ -913,7 +913,8 @@ def sports_page(idx: epgsearch.Index, day: str, tzo: int, caps: dict, favourites
         if not groups:
             continue
         counts[ev["sport"]] = counts.get(ev["sport"], 0) + 1
-        out.append({k: v for k, v in ev.items() if k not in ("ids", "key", "score")} |
+        # score: the event's importance (epgsearch.Index._sport_event), which the page ranks Live now by
+        out.append({k: v for k, v in ev.items() if k not in ("ids", "key")} |
                    {"channels": groups[:epgsearch.MAX_GROUPS], "more": max(0, len(groups) - epgsearch.MAX_GROUPS)})
     return {"events": out, "counts": counts, "day": day, "now": int(now), "built": int(idx.built),
             "ms": {"events": round((t1 - t0) * 1000, 1), "total": round((time.perf_counter() - t0) * 1000, 1)}}

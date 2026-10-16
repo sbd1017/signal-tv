@@ -292,6 +292,7 @@ team:kauno-zalgiris = Kauno Žalgiris | Kauno Zalgiris | Κάουνο Ζαλγκ
 team:hajduk-split = Hajduk Split | HNK Hajduk Split | Χάιντουκ Σπλιτ ; weak: Hajduk
 team:fluminense = Fluminense
 team:levante = Levante | Levante UD
+team:racing-santander = Racing Santander | Racing de Santander | Real Racing Club | Real Racing Club de Santander | Racing Santander FC
 team:universitatea-craiova = Universitatea Craiova | CS Universitatea Craiova | CS U Craiova | U Craiova
 team:cska-sofia = CSKA Sofia | PFC CSKA Sofia
 team:dinamo-bucuresti = Dinamo București | Dinamo Bucuresti | Dinamo Bucharest | Dínamo Bucareste | Dinamo Bucareste
@@ -636,7 +637,7 @@ SHOW_WORDS = ("highlights | highlight | hl | hlts | hls | hoogtepunten | magazin
               "quiz | vlog | this week | tribute | history | archive | anthology | special | specials | nejlepsi momenty | "
               "greatest games | the story | movie | film | official film")
 REPLAY_WORDS = ("replay | rerun | re run | re air | reair | delayed | deferred | repeat | wiederholung | repeticion | "
-                "reprise | rediffusion | replica | en diferido | diferido | powtorka | ponovitev | encore | retro")
+                "reprise | rediffusion | replica | en diferido | diferido | powtorka | ponovitev | encore | retro | snimak | snimka")
 LIVE_WORDS = "live | en vivo | en directo | ao vivo | en direct | direct | diretta | na zivo | uzivo | v zivo | live now"
 WOMEN_WORDS = {"women", "womens", "w", "ladies", "feminino", "femenino", "femminile", "frauen", "damer", "kvinner",
                "kvinnor", "feminine", "zene", "kobiet", "noi", "ž"}
@@ -1092,7 +1093,8 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
     if not tw:
         return None
     info = Info()
-    info.replay = has_any(tw, _REPLAY) or "(r)" in title.lower() or "(rep)" in title.lower()
+    info.replay = has_any(tw, _REPLAY) or "(r)" in title.lower() or "(rep)" in title.lower() \
+        or bool(desc) and has_any(norm(desc[:80]).split()[:3], _REPLAY)          # a description that opens "Snimak" / "Replay"
     if re.search(r"\((?:w|women|womens|ž|f|fem)\)", title, re.I):
         info.women = True
     m = _DATE.search(title)
