@@ -37,7 +37,7 @@ FCACHE=${TV_FAMILY_CACHE:-/var/cache/signal-tv-family}
 OWNER_STATE=${TV_OWNER_STATE:-/var/lib/signal-tv}
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 RESERVED=" tv tv-test next new pwa static api m bets home media go convert pokemon admin login "
-OWNER_MAP='    "~^POST:/tv/api/family/[a-z0-9-]+/(passphrase|signout)$" 1;   # Signal TV: Settings > Family sites'
+OWNER_MAP='    "~^POST:/tv/api/family/[a-z0-9-]+/(passphrase|signout|provider)$" 1;   # Signal TV: Settings > Family sites'
 
 add_map_line() {  # add_map_line LINE: into the site's method map, after the /tv state line (once)
   $SUDO python3 - "$SITEMAP" "$1" <<'PY'
@@ -97,7 +97,11 @@ nginx_install() {  # nginx_install NAME PORT: the snippet, the owner's include a
   $SUDO chmod 0644 "$snip"
   local line="    \"~^POST:/$name/(api/(state(/import)?|login|logout)|next/api/art/gaps)\$\" 1;   # Signal TV family site $name"
   $SUDO grep -qF "POST:/$name/" "$SITEMAP" || add_map_line "$line"
-  $SUDO grep -qF 'POST:/tv/api/family/' "$SITEMAP" || add_map_line "$OWNER_MAP"
+  # the owner's Settings line: added once, replaced when the repo's version changes (new actions)
+  if ! $SUDO grep -qF "$OWNER_MAP" "$SITEMAP"; then
+    $SUDO grep -qF 'POST:/tv/api/family/' "$SITEMAP" && $SUDO python3 -c 'import sys; p = sys.argv[1]; t = open(p).read().splitlines(True); open(p, "w").writelines(l for l in t if "POST:/tv/api/family/" not in l)' "$SITEMAP"
+    add_map_line "$OWNER_MAP"
+  fi
   if ! $SUDO "$NGINX" -t 2>/dev/null; then
     $SUDO cp -a "$b/$(basename "$SITEMAP")" "$SITEMAP"; $SUDO cp -a "$b/signal-tv.conf" "$SNIPPETS/signal-tv.conf"; $SUDO rm -f "$snip"
     echo "nginx -t failed: restored from $b"; $SUDO "$NGINX" -t; exit 1
