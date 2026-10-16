@@ -2,6 +2,13 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.4.0 - 2026-10-16
+
+- Films and Series tiles (grids and search): a favourite star in the poster's corner
+- Public changelog: leave out housekeeping and changes later undone
+- More like this on a series' or film's page
+- More like this: the series index is also built at startup (from the saved catalogue)
+
 ## v1.3.0 - 2026-10-16
 
 - Layout per device (Sports tab, the page it opens on); NFL nicknames when only the description names the sport
