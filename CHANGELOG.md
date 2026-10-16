@@ -2,6 +2,11 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.9.0 - 2026-10-17
+
+- Classic: switch a channel to the backup provider (and back), the other channels showing the match being watched, a favourite star on film and series tiles, More like this under a title's details, the cast in the player (Settings: per device)
+- Classic: team crests and competition logos on Sports (unlisted clubs' too) and the competition ESPN gives where the guide names none; Settings: Layout (open on / Sports tab, per device), Providers (the backup subscription) and Artwork (gaps, Add crest)
+
 ## v1.8.0 - 2026-10-16
 
 - Sports artwork: guides' other spellings of listed clubs, show titles filtered, name variants share one crest
