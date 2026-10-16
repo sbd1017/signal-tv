@@ -1103,6 +1103,42 @@ async def acquire(eid: str, lib: Library, src: TheSportsDB, persist: bool = True
     return meta
 
 
+# ------------------------------------------------------------------ the owner's own artwork
+MANUAL_LICENCE = "Added by the owner of this TV (Settings › Artwork); its rights stay with the club or competition."
+
+
+def manual_target(lib: "Library", eid: str, sport: str = "") -> str | None:
+    """The id an uploaded crest is kept under: a known team or competition as it is; a guide name (an older
+    "name:" gap) as that club's guest id, in its sport (from the gap's competition, else football)."""
+    if eid.startswith(("team:", "comp:")):
+        return eid if eid in entities() else None
+    if eid.startswith("guest:"):
+        return eid if eid in lib.guests() else None
+    if eid.startswith("name:"):
+        name = eid[5:].strip()
+        if not sport:
+            g = lib.gaps.data.get(f"{eid}#crest") or {}
+            comps = sorted(g.get("competitions", {}), key=lambda c: -g["competitions"][c])
+            hit = next((sports.ENTITIES[i] for c in comps if (i := sports.resolve_side(c)[0]) >= 0), None)
+            sport = sports.SPORT_KEYS.get(hit.sport, "football") if hit and hit.sport else "football"
+        gid = guest_id(sport if sport in GUEST_SPORTS else "football", name)
+        if gid:
+            lib.add_guest(gid, name, sport if sport in GUEST_SPORTS else "football")
+        return gid
+    return None
+
+
+def store_manual(lib: "Library", eid: str, data: bytes, name: str, url: str = "", from_gap: str = "") -> dict:
+    meta = lib.store(eid, data, {"name": name, "source": "manual", "source_id": "owner", "source_name": "added by the owner",
+                                 "source_url": url, "api_url": "", "match": {"method": "added by the owner"},
+                                 "licence": MANUAL_LICENCE, "attribution": "the owner"})
+    if from_gap and from_gap != eid:
+        lib.gaps.resolve(from_gap, "added by the owner")
+    lib.gaps.flush()
+    lib.log({"id": eid, "result": "cached", "source": "manual", "bytes": len(data), **({"url": url} if url else {})})
+    return meta
+
+
 # ------------------------------------------------------------------ background queue
 class Acquirer:
     """Deduplicated FIFO of entities to look up; one worker; nothing blocks a page."""
@@ -1171,7 +1207,7 @@ class Acquirer:
                 checked = datetime.strptime(m.get("checked", ""), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
             except ValueError:
                 checked = 0
-            if checked > cutoff or eid not in ents:
+            if checked > cutoff or eid not in ents or m.get("source") == "manual":     # the owner's own: never replaced
                 continue
             source = m.get("source", "thesportsdb")
             path = (m.get("match") or {}).get("path", "")
@@ -1239,7 +1275,8 @@ class Gaps:
                     self.data.pop(f"{old['id']}#{old['artwork']}", None)
                 if len(self.data) >= self.MAX:
                     return {}
-            g = self.data[k] = {"id": eid, "name": name, "type": {"comp": "competition", "team": "team", "name": "unlisted team"}[eid.split(":")[0]],
+            g = self.data[k] = {"id": eid, "name": name, "type": {"comp": "competition", "team": "team", "name": "unlisted team",
+                                                                  "guest": "unlisted team"}[eid.split(":")[0]],
                                 "artwork": self.art(eid), "reason": reason, "first_seen": at, "last_seen": at, "count": 0,
                                 "contexts": {}, "competitions": {}, "status": "open", "resolved_at": None, "resolved_by": None, "history": []}
         elif g["status"] == "resolved":

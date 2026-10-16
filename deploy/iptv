@@ -78,6 +78,7 @@ iptv - manage Signal TV (https://example.com/tv)
   iptv backups             list backups and the last Google Drive upload
   iptv ui [status|new|classic]  default interface for devices that haven't chosen one in Settings
   iptv artwork missing [--teams|--competitions] [--most-seen|--recent] [--resolved|--all] [--json]
+  iptv artwork add "Club name" <image link or file> [sport]   a crest by hand (kept, never replaced)
                            sports crests/logos (/tv-test library): coverage, gaps seen on screen, guide names with no entry
 USAGE
 }
@@ -215,7 +216,30 @@ except OSError as e:
     esac ;;
   artwork)
     sub=${1:-missing}; shift || true
-    [ "$sub" = missing ] || { echo "usage: iptv artwork missing [--teams|--competitions] [--most-seen|--recent] [--resolved|--all] [--json]"; exit 2; }
+    if [ "$sub" = add ]; then
+      # iptv artwork add "Ruch Chorzów" <image link or file> [sport]: a crest (or a comp:/team:/guest: id's logo) by hand
+      [ $# -ge 2 ] || { echo 'usage: iptv artwork add "Club name" | team:<id> | comp:<id>  <https://link | /path/to/image>  [sport]'; exit 2; }
+      who=$1; src=$2; sport=${3:-football}
+      python3 - "$who" "$src" "$sport" <<'PY'
+import base64, json, sys, urllib.request, urllib.error
+who, src, sport = sys.argv[1:4]
+body = {"sport": sport, **({"id": who} if who.split(":")[0] in ("team", "comp", "guest", "name") else {"name": who})}
+if src.startswith(("http://", "https://")):
+    body["url"] = src
+else:
+    body["data"] = base64.b64encode(open(src, "rb").read()).decode()
+req = urllib.request.Request("http://127.0.0.1:8792/internal/art-add", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+try:
+    d = json.loads(urllib.request.urlopen(req, timeout=60).read())
+    print(f"Saved for {d['id']}: every TV shows it from the next page load.")
+except urllib.error.HTTPError as e:
+    print(json.loads(e.read() or b"{}").get("error") or f"HTTP {e.code}"); sys.exit(1)
+except OSError as e:
+    print(f"The artwork service (signal-tv-next) is not answering: {e}"); sys.exit(1)
+PY
+      exit $?
+    fi
+    [ "$sub" = missing ] || { echo "usage: iptv artwork missing [--teams|--competitions] [--most-seen|--recent] [--resolved|--all] [--json] | iptv artwork add NAME IMAGE [sport]"; exit 2; }
     q="format=text"
     for a in "$@"; do case "$a" in
       --teams) q+="&kind=team" ;; --competitions) q+="&kind=comp" ;;

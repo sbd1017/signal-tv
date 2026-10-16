@@ -1209,7 +1209,7 @@ async function viewSports() {
       const t = known(sideIds[i]);
       const flag = fl[i] || (t && t.national ? flags.flagCode(t.name) : '');   // a known national side on its own counts too
       const g = sideIds[i] ? '' : guestIdx.get(`${ev.sport}|${label}`) || '';       // looked up by name on the Pi
-      return { label, id: sideIds[i], art: sideIds[i] || (g && hasArt(g) ? g : ''), crest: art.crest(sideIds[i], label), flag, national: !!(t && t.national) };
+      return { label, id: sideIds[i], art: sideIds[i] || (g && hasArt(g) ? g : ''), guest: g, crest: art.crest(sideIds[i], label), flag, national: !!(t && t.national) };
     });
   }
 
@@ -1233,7 +1233,9 @@ async function viewSports() {
     // a national team's artwork is its football federation's: never on cricket, tennis…
     if (sport !== 'football' && (!hasArt(id) || ((sportsCat && sportsCat.byId.get(id)) || {}).national)) return disc();
     if (!hasArt(id)) {
-      if (gap && (id ? artNone(id) : nameIdx.has(gap.label) && !nameIdx.get(gap.label))) noteGap(id, gap.label, gap.context, gap.comp);
+      // an unlisted club the Pi looked up by name: the gap is that id's (so a crest added for it shows here)
+      if (gap && !id && gap.guest && artNone(gap.guest)) noteGap(gap.guest, gap.label, gap.context, gap.comp);
+      else if (gap && (id ? artNone(id) : nameIdx.has(gap.label) && !nameIdx.get(gap.label))) noteGap(id, gap.label, gap.context, gap.comp);
       return disc();
     }
     const im = h('img', { src: artUrl(id, big ? 256 : 128), alt: '', decoding: 'async' });
@@ -1306,7 +1308,7 @@ async function viewSports() {
       compLabel(ev, meta || SPORT_NAMES[ev.sport] || 'Sport', where), ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, star);
     const sides = teamSides(ev);
     const name = (t) => { const s = capsSpan(t.label); s.classList.add('fx-name'); return s; };
-    const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.art, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp }, t.flag), name(t),
+    const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.art, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp, guest: t.guest }, t.flag), name(t),
       sk ? h('span', { class: 'fx-score', dataset: { team: sideToken(t) }, 'aria-hidden': 'true' }) : null)))
       : h('div', { class: 'fx-title' }, capsSpan(ev.title));
     const mainBtn = h('button', { class: 'fx-main', type: 'button', 'aria-label': `Play ${ev.title} on ${best.ch.name}` }, title);
@@ -1358,7 +1360,7 @@ async function viewSports() {
     const meta = [ev.comp, ['all', 'foryou'].includes(pick.sport) || !ev.comp ? SPORT_NAMES[ev.sport] : ''].filter(Boolean).join(' · ');
     const sides = teamSides(ev);
     const title = h('span', { class: `dep-title ${isFavEvent(ids) ? 'is-fav' : ''}` });
-    const gap = (t) => ({ label: t.label, context: 'sports:board', comp: ev.comp });
+    const gap = (t) => ({ label: t.label, context: 'sports:board', comp: ev.comp, guest: t.guest });
     if (sides) title.append(crestEl(sides[0].crest, sides[0].art, false, ev.sport, gap(sides[0]), sides[0].flag), capsSpan(sides[0].label), h('span', { class: 'vs', text: 'v' }),
       crestEl(sides[1].crest, sides[1].art, false, ev.sport, gap(sides[1]), sides[1].flag), capsSpan(sides[1].label));
     else title.append(capsSpan(ev.title));
@@ -2928,15 +2930,15 @@ function renderArtwork(box) {
   let open = false;
   try { open = localStorage.getItem(OPEN_KEY) === '1'; } catch { /* private mode */ }
   let pick = 'seen';
-  let all = false;                                        // the first 5, or up to 12
+  let shownN = 5;                                         // the first 5, then 25 more at a time
   let gaps = [];
   const list = h('ol', { class: 'gap-list' });
   const more = h('button', { class: 'btn ghost small', type: 'button', hidden: true });
   const sum = h('p', { class: 'muted small', text: 'Loading…' });
   const toggle = h('button', { class: 'btn ghost small art-toggle', type: 'button', 'aria-expanded': 'false' }, h('span'), icon('chev-down'));
   const body = h('div', { class: 'art-body' },
-    seg('Artwork gaps', [['seen', 'Most seen'], ['recent', 'Recent'], ['resolved', 'Resolved']], pick, (v) => { pick = v; all = false; draw(); }), list, more,
-    h('p', { class: 'muted small', text: 'Generated crests and marks drawn for want of verified artwork. Full report: iptv artwork missing.' }));
+    seg('Artwork gaps', [['seen', 'Most seen'], ['recent', 'Recent'], ['resolved', 'Resolved']], pick, (v) => { pick = v; shownN = 5; draw(); }), list, more,
+    h('p', { class: 'muted small', text: 'Generated crests and marks drawn for want of verified artwork. Add one yourself with Add crest: pick an image, or paste the link to one (on Wikipedia: open the crest, then copy the image address). It is kept on the Pi and used on every TV.' }));
   const paintOpen = () => {
     body.hidden = !open;
     toggle.setAttribute('aria-expanded', String(open));
@@ -2948,17 +2950,23 @@ function renderArtwork(box) {
     paintOpen();
   });
   const paintRows = () => {
-    const shown = gaps.slice(0, all ? 12 : 5);
-    const rows = shown.map((g) => h('li', { class: 'gap' },
-      h('span', { class: 'gap-n', text: `${g.count}×` }),
-      h('span', { class: 'gap-what' }, h('span', {}, h('b', { text: g.name }), h('span', { class: 'muted', text: ` ${g.type === 'competition' ? 'logo' : g.type === 'unlisted team' ? 'unlisted team' : 'crest'} · ${ago(Date.parse(g.last_seen) / 1000)}` })),
-        h('span', { class: 'gap-why', text: g.status === 'resolved' ? `Resolved: ${g.resolved_by}` : g.reason }))));
+    const shown = gaps.slice(0, shownN);
+    const rows = shown.map((g) => {
+      const what = g.type === 'competition' ? 'logo' : 'crest';
+      const add = g.status === 'open' && !FAMILY ? h('button', { class: 'btn ghost small gap-add', type: 'button', text: `Add ${what}` }) : null;
+      const li = h('li', { class: 'gap' },
+        h('span', { class: 'gap-n', text: `${g.count}×` }),
+        h('span', { class: 'gap-what' }, h('span', {}, h('b', { text: g.name }), h('span', { class: 'muted', text: ` ${g.type === 'competition' ? 'logo' : g.type === 'unlisted team' ? 'unlisted team' : 'crest'} · ${ago(Date.parse(g.last_seen) / 1000)}` })),
+          h('span', { class: 'gap-why', text: g.status === 'resolved' ? `Resolved: ${g.resolved_by}` : g.reason }), add));
+      if (add) add.addEventListener('click', () => { add.replaceWith(artworkForm(g, what, () => { toast(`${g.name}: ${what} added`); draw(); })); });
+      return li;
+    });
     list.replaceChildren(...(rows.length ? rows : [h('li', { class: 'muted small', text: pick === 'resolved' ? 'Nothing resolved yet.' : 'No gaps recorded: every crest and logo shown so far was real.' })]));
-    const rest = Math.min(gaps.length, 12) - shown.length;
+    const rest = gaps.length - shown.length;
     more.hidden = rest <= 0;
-    more.textContent = `Show ${rest} more`;
+    more.textContent = `Show ${Math.min(rest, 25)} more`;
   };
-  more.addEventListener('click', () => { all = true; paintRows(); });
+  more.addEventListener('click', () => { shownN += 25; paintRows(); });
   const draw = async () => {
     const q = pick === 'resolved' ? 'state=resolved&sort=recent' : `state=open&sort=${pick}`;
     try {
@@ -2983,6 +2991,61 @@ function renderArtwork(box) {
   box.replaceChildren(h('h2', { text: 'Artwork' }), h('div', { class: 'art-sum' }, sum, toggle), body);
   paintOpen();
   draw();
+}
+
+// Add a crest / logo by hand (the owner's own site): an image from this device - shrunk here to a small
+// PNG / WebP, SVG included - or the link to one, which the Pi fetches (tvnext: /api/art/manual).
+async function shrinkImage(file) {
+  const src = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const w0 = img.naturalWidth || 512;
+    const h0 = img.naturalHeight || 512;
+    for (const max of [256, 192, 128]) {
+      const k = Math.min(1, max / Math.max(w0, h0));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w0 * k));
+      c.height = Math.max(1, Math.round(h0 * k));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      for (const type of ['image/webp', 'image/png']) {
+        const b = await new Promise((r) => c.toBlob(r, type, 0.92));
+        if (b && b.type === type && b.size < 60000) return b;
+      }
+    }
+  } finally { URL.revokeObjectURL(src); }
+  throw new Error('That image is too detailed to send, even shrunk. Try another.');
+}
+
+function artworkForm(g, what, done) {
+  const file = h('input', { type: 'file', accept: 'image/*', hidden: true });
+  const choose = h('button', { class: 'btn small', type: 'button', text: 'Choose image' });
+  const url = h('input', { class: 'input', type: 'url', placeholder: 'or paste a link to the image', autocomplete: 'off', 'aria-label': `Link to a ${what} for ${g.name}` });
+  const save = h('button', { class: 'btn small primary', type: 'button', text: 'Save' });
+  const msg = h('span', { class: 'small muted', 'aria-live': 'polite' });
+  const send = async (body, type) => {
+    msg.className = 'small muted';
+    msg.textContent = 'Saving…';
+    save.disabled = true;
+    try {
+      const res = await fetch(`${NEXT}/api/art/manual?${new URLSearchParams({ id: g.id, name: g.name })}`, {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': type }, body });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || `Not saved (HTTP ${res.status})`);
+      artAsked.delete(d.id);                          // the Sports page asks again and draws it
+      done();
+    } catch (e) { msg.className = 'small warn'; msg.textContent = e.message; save.disabled = false; }
+  };
+  choose.addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    try { const b = await shrinkImage(f); await send(b, b.type); } catch (e) { msg.className = 'small warn'; msg.textContent = e.message; }
+  });
+  save.addEventListener('click', () => { if (url.value.trim()) send(JSON.stringify({ url: url.value.trim() }), 'application/json'); else url.focus(); });
+  url.addEventListener('keydown', (e) => { if (e.key === 'Enter') save.click(); });
+  return h('span', { class: 'gap-form' }, choose, url, save, file, msg);
 }
 
 async function pollRefresh(after) {

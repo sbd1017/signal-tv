@@ -5,6 +5,7 @@ without a proxy (maintenance from the Pi)."""
 from __future__ import annotations
 
 import asyncio
+import json
 import contextlib
 import logging
 import re
@@ -23,7 +24,7 @@ IMMUTABLE = "private, max-age=31536000, immutable"
 ID = re.compile(r"^(team|comp):[a-z0-9-]{1,60}$")
 GUEST = re.compile(r"^guest:[a-z0-9-]{1,60}$")
 PREFIXES = ("/tv-test", "/tv/next", *config.SITES)   # the preview, the live interface, the family sites (deploy/build_ui.py)
-GAP_ID = re.compile(r"^(team|comp|name):[\w -]{1,60}$")
+GAP_ID = re.compile(r"^(team|comp|name):[\w -]{1,60}$|^guest:[a-z0-9-]{1,60}$")
 
 
 class S:
@@ -250,6 +251,93 @@ async def art_file(kind: str, name: str, size: int):
 # ------------------------------------------------------------------ maintenance (loopback only)
 def _local(request: Request) -> bool:
     return request.client and request.client.host in ("127.0.0.1", "::1") and "x-forwarded-for" not in request.headers
+
+
+# ------------------------------------------------------------------ crests and logos added by the owner
+MAX_IMAGE = 3 * 1024 * 1024
+
+
+async def fetch_image(url: str) -> bytes:
+    """An image from a public web address: http(s) only, never a private address, at most 3 MB."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+    for _ in range(4):                                           # a redirect is checked like the first address
+        u = urlsplit(url.strip())
+        if u.scheme not in ("http", "https") or not u.hostname:
+            raise ValueError("Use an http(s) link to the image.")
+        infos = await asyncio.get_running_loop().getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        if any(not ipaddress.ip_address(i[4][0]).is_global for i in infos):
+            raise ValueError("That address isn't on the public web.")
+        async with S.client.stream("GET", url, timeout=20, headers={"User-Agent": "Mozilla/5.0 (crest for a home TV app)"}) as r:
+            if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
+                url = str(httpx.URL(url).join(r.headers["location"]))
+                continue
+            if r.status_code != 200:
+                raise ValueError(f"The link answered HTTP {r.status_code}.")
+            if not r.headers.get("content-type", "").startswith("image/"):
+                raise ValueError("That link isn't an image (copy the image's own address).")
+            data = b""
+            async for chunk in r.aiter_bytes():
+                data += chunk
+                if len(data) > MAX_IMAGE:
+                    raise ValueError("That image is over 3 MB.")
+            return data
+    raise ValueError("Too many redirects.")
+
+
+async def add_artwork(eid: str, sport: str, name: str, data: bytes | None, url: str) -> JSONResponse:
+    target = sportsart.manual_target(S.lib, eid, sport)
+    if not target:
+        return JSONResponse({"error": "Not a team or competition the TV knows."}, status_code=400)
+    try:
+        if not data:
+            data = await fetch_image(url)
+        if b"<svg" in data[:2000].lower():
+            raise ValueError("SVG images aren't supported: use a PNG, JPEG or WebP (on Wikipedia, the PNG preview).")
+        meta = await asyncio.to_thread(sportsart.store_manual, S.lib, target, data, name or eid.split(":", 1)[1], url, eid)
+    except (ValueError, httpx.HTTPError, OSError) as e:
+        return JSONResponse({"error": str(e) if isinstance(e, ValueError) else f"Couldn't fetch it ({type(e).__name__})."}, status_code=400)
+    log.info("artwork for %s added by the owner (%s)", target, "link" if url else "upload")
+    return JSONResponse({"ok": True, "id": target, "v": meta["sha256"][:10]})
+
+
+@route("POST", "/api/art/manual")
+async def art_manual(request: Request, id: str = "", sport: str = "", name: str = ""):
+    """Settings › Artwork › Add crest: the owner's own site only (a family site's /<site>/next/ never)."""
+    if not request.url.path.startswith(("/tv/next/", "/tv-test/")) or not GAP_ID.match(id):
+        return Response(status_code=404)
+    ctype = request.headers.get("content-type", "").split(";")[0].strip()
+    body = await request.body()
+    if len(body) > MAX_IMAGE:
+        return JSONResponse({"error": "That image is over 3 MB."}, status_code=400)
+    if ctype == "application/json":
+        try:
+            url = str((json.loads(body) or {}).get("url") or "")
+        except ValueError:
+            return JSONResponse({"error": "bad request"}, status_code=400)
+        return await add_artwork(id, sport, name[:80], None, url)
+    if not ctype.startswith("image/"):
+        return JSONResponse({"error": "Send an image."}, status_code=400)
+    return await add_artwork(id, sport, name[:80], body, "")
+
+
+@app.post("/internal/art-add")
+async def internal_art_add(request: Request):
+    """`iptv artwork add`: {"id" | "name", "sport", "url" | "data" (base64)}; loopback only."""
+    import base64
+    if not _local(request):
+        return Response(status_code=404)
+    try:
+        b = await request.json()
+    except ValueError:
+        return JSONResponse({"error": "bad request"}, status_code=400)
+    eid, sport, name = str(b.get("id") or ""), str(b.get("sport") or "football"), str(b.get("name") or "")
+    if not eid and name:                                          # by name: a known team, else that name as an unlisted one
+        i, key, _ = sports.resolve_side(name, {v: k for k, v in sports.SPORT_KEYS.items()}.get(sport, 0))
+        eid = key if i >= 0 and key.startswith("team:") else f"name:{name}"
+    data = base64.b64decode(b["data"]) if b.get("data") else None
+    return await add_artwork(eid, sport, name, data, str(b.get("url") or ""))
 
 
 @app.post("/internal/tmdb-key")

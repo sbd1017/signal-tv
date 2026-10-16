@@ -692,3 +692,49 @@ class Scores(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ManualArtwork(unittest.TestCase):
+    """Crests the owner adds (Settings › Artwork, iptv artwork add): kept, never replaced, on the card's own id."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.lib = sportsart.Library(Path(self.tmp.name))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_targets(self):
+        self.assertEqual(sportsart.manual_target(self.lib, "team:arsenal"), "team:arsenal")
+        self.assertIsNone(sportsart.manual_target(self.lib, "team:not-a-club"))
+        self.lib.gaps.record("name:Ruch Chorzów", "Ruch Chorzów", "sports:card", "Premier League", "unlisted")
+        self.assertEqual(sportsart.manual_target(self.lib, "name:Ruch Chorzów"), "guest:football--ruch-chorzow")
+        self.assertIn("guest:football--ruch-chorzow", self.lib.guests())
+        self.assertEqual(sportsart.manual_target(self.lib, "name:Rytas", "basketball"), "guest:basketball--rytas")
+
+    def test_stored_resolved_and_never_refreshed(self):
+        self.lib.gaps.record("name:Ruch Chorzów", "Ruch Chorzów", "sports:card", "", "unlisted")
+        gid = sportsart.manual_target(self.lib, "name:Ruch Chorzów")
+        meta = sportsart.store_manual(self.lib, gid, png(200, 200), "Ruch Chorzów", "", "name:Ruch Chorzów")
+        self.assertEqual(meta["source"], "manual")
+        self.assertIn(gid, self.lib.index())
+        self.assertEqual(self.lib.gaps.data["name:Ruch Chorzów#crest"]["status"], "resolved")
+        acq = sportsart.Acquirer(self.lib, client=None)
+        self.assertEqual(acq.enqueue([gid]), 0, "never looked up again")
+
+    def test_owner_site_only_and_public_links_only(self):
+        from fastapi.testclient import TestClient
+        from tvnext import server
+        with TestClient(server.app) as c:
+            server.S.lib = self.lib
+            img = png(120, 120)
+            ok = c.post("/tv/next/api/art/manual?id=team:arsenal&name=Arsenal", content=img, headers={"Content-Type": "image/png"})
+            self.assertEqual(ok.status_code, 200, ok.text)
+            self.assertIn("team:arsenal", self.lib.index())
+            for site in config.SITES:
+                self.assertEqual(c.post(f"{site}/next/api/art/manual?id=team:chelsea", content=img, headers={"Content-Type": "image/png"}).status_code, 404)
+            bad = c.post("/tv/next/api/art/manual?id=team:chelsea", json={"url": "http://127.0.0.1:8790/tv/"})
+            self.assertEqual(bad.status_code, 400)
+            self.assertIn("public web", bad.json()["error"])
+            svg = c.post("/tv/next/api/art/manual?id=team:chelsea", content=b"<svg xmlns='http://www.w3.org/2000/svg'/>", headers={"Content-Type": "image/svg+xml"})
+            self.assertEqual(svg.status_code, 400)

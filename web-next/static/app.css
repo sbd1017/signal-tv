@@ -1077,3 +1077,8 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .pc-text b, .pc-text span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .pc-text em { font-style: normal; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--star, #f5c518); }
 @media (max-width: 760px) { .p-cast { bottom: 104px; } .pc-person { width: 74px; } .pc-face { width: 52px; height: 52px; } }
+
+/* Settings › Artwork: add a crest by hand */
+.gap-add { justify-self: start; margin-top: 4px; }
+.gap-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.gap-form .input { flex: 1 1 220px; min-width: 0; height: 34px; font-size: 13px; }
