@@ -1574,6 +1574,12 @@ function cardFor(kind, it) {
   const poster = thumb(it.img, v.clean, 'poster');
   if (v.code) poster.append(h('span', { class: `lang-chip ${v.tier === 0 ? 'en' : ''} ${v.uhd ? 'hot' : ''}`, text: v.code, title: v.prefix }));
   if (kind === 'movies') setPosterBadges(poster, it.id);
+  // favourite straight from a grid or search: the star in the poster's corner (the tile itself opens the title)
+  const star = favButton(it.id, { name: it.name, img: it.img, kind: kind === 'movies' ? 'movie' : 'series' });
+  star.classList.add('card-fav');
+  star.setAttribute('aria-label', `Favourite ${v.clean}`);
+  star.addEventListener('click', (e) => e.preventDefault());
+  poster.append(star);
   const year = it.year || names.film(it.name).year;
   a.append(poster, h('span', { class: 'card-title', text: v.clean }),
     h('span', { class: 'card-sub' }, year ? h('span', { text: String(year) }) : null,

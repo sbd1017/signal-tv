@@ -1040,3 +1040,14 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .prov-form { display: grid; gap: 10px; padding: 12px 0 4px; }
 .prov-form .seg { justify-self: start; }
 .prov-form[hidden], .prov-form .pref-row[hidden] { display: none; }
+
+/* the favourite star on a poster tile: on hover / focus, always once favourited, always on touch screens */
+.card-fav.fav-btn { position: absolute; z-index: 3; right: 8px; top: 8px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(10, 10, 12, .62); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: #fff; border: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .14); opacity: 0; transform: scale(.9); transition: opacity .18s, transform .18s; }
+.card-fav.fav-btn .ico { width: 17px; height: 17px; }
+.card:hover .card-fav, .card:focus-within .card-fav, .card-fav.on, .card-fav:focus-visible { opacity: 1; transform: none; }
+.card-fav.fav-btn:hover { background: rgba(10, 10, 12, .85); }
+@media (hover: none) { .card-fav.fav-btn { opacity: .92; transform: none; width: 30px; height: 30px; } }
+.card-fav.fav-btn.on { color: var(--star); }
+.card .thumb .watched { top: auto; bottom: 16px; }           /* the star has the top corner */
