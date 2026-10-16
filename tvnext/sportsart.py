@@ -84,11 +84,11 @@ _COUNTRIES = {
              "genoa sassuolo parma lecce monza frosinone sudtirol virtus-bologna olimpia-milano derthona",
     "Germany": "bayern-munich borussia-dortmund bayer-leverkusen rb-leipzig eintracht-frankfurt vfb-stuttgart "
                "borussia-monchengladbach vfl-wolfsburg sc-freiburg werder-bremen union-berlin hamburger-sv tsg-hoffenheim "
-               "fc-augsburg schalke-04 1-fc-nurnberg hansa-rostock 1-fc-saarbrucken msv-duisburg fortuna-koln rot-weiss-essen sv-meppen 1-fc-koln holstein-kiel hertha-bsc preussen-munster fortuna-dusseldorf",
+               "fc-augsburg schalke-04 1-fc-nurnberg hansa-rostock 1-fc-saarbrucken msv-duisburg fortuna-koln rot-weiss-essen sv-meppen 1-fc-koln holstein-kiel hertha-bsc preussen-munster fortuna-dusseldorf sv-elversberg energie-cottbus",
     "France": "paris-saint-germain marseille lyon as-monaco lille ogc-nice rc-lens stade-rennais strasbourg auxerre le-mans "
               "stade-brestois angers troyes fc-nantes stade-de-reims saint-etienne rodez paris-basketball asvel",
     "Portugal": "benfica fc-porto sporting-cp sc-braga famalicao alverca maritimo vitoria-guimaraes torreense",
-    "Netherlands": "ajax psv-eindhoven feyenoord az-alkmaar nec-nijmegen heerenveen",
+    "Netherlands": "ajax psv-eindhoven feyenoord az-alkmaar nec-nijmegen heerenveen fortuna-sittard",
     "Turkey": "galatasaray fenerbahce besiktas trabzonspor rizespor anadolu-efes",
     "Belgium": "club-brugge anderlecht union-saint-gilloise",
     "Austria": "red-bull-salzburg lask sturm-graz",
