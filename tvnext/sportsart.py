@@ -1321,6 +1321,13 @@ class Gaps:
                 i, _, _ = sports.resolve_side(g["name"])
                 if i >= 0:
                     n += self.resolve(g["id"], f"now a canonical entry: {sports.ENTITIES[i].key}")
+                    continue
+                # found by name since (a guest's crest, from a source or the owner): any sport's
+                for sport in GUEST_SPORTS:
+                    gid = guest_id(sport, g["id"][5:])
+                    if gid and gid in index:
+                        n += self.resolve(g["id"], f"crest found for {gid}")
+                        break
         return n
 
     def flush(self) -> None:

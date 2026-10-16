@@ -738,3 +738,11 @@ class ManualArtwork(unittest.TestCase):
             self.assertIn("public web", bad.json()["error"])
             svg = c.post("/tv/next/api/art/manual?id=team:chelsea", content=b"<svg xmlns='http://www.w3.org/2000/svg'/>", headers={"Content-Type": "image/svg+xml"})
             self.assertEqual(svg.status_code, 400)
+
+    def test_a_name_gap_closes_when_its_guest_has_a_crest(self):
+        self.lib.gaps.record("name:Kitchee", "Kitchee", "sports:card", "", "unlisted")
+        gid = sportsart.guest_id("football", "Kitchee")
+        self.lib.add_guest(gid, "Kitchee", "football")
+        self.lib.store(gid, png(120, 120), {"name": "Kitchee", "source": "thesportsdb", "source_id": "1", "source_url": "u", "match": {}})
+        self.lib.gaps.reconcile(self.lib.index())
+        self.assertEqual(self.lib.gaps.data["name:Kitchee#crest"]["status"], "resolved")
