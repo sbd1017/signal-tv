@@ -339,7 +339,11 @@ def health_report() -> dict:
 
 def reload_config() -> None:
     log.info("SIGHUP: re-reading %s and refreshing", cfg.CONFIG_PATH)
+    old = S.settings
     S.settings = cfg.load()
+    who = lambda s: (s.provider_type, s.xtream_base, s.xtream_user, s.xtream_pass, s.m3u_url)   # noqa: E731
+    if who(old) != who(S.settings) and S.cat.cancel_refresh():
+        log.info("provider changed: the refresh from the previous one was stopped")
     S.cat.configure(S.settings)
     S.engine.s = S.settings
     S.keys.reload()

@@ -163,6 +163,27 @@ class CatalogueRefresh(unittest.TestCase):
         self.assertFalse(self.cat.accept_next)
         self.assertEqual(self.cat.next_try, 0)
 
+    def test_a_new_provider_stops_the_old_ones_refresh(self):
+        class Stuck:                                  # a slow provider: never finishes
+            kind, stats = "xtream", {}
+
+            async def fetch(self, http):
+                await asyncio.sleep(3600)
+
+        async def go():
+            self.cat.provider = Stuck()
+            old = asyncio.create_task(self.cat.refresh("scheduled"))
+            await asyncio.sleep(0.05)
+            self.assertFalse(await self.cat.refresh("manual"), "anything else leaves it running")
+            self.cat.provider = FakeProvider([catalogue(movies=1000)])
+            self.assertTrue(self.cat.cancel_refresh())
+            self.assertTrue(await self.cat.refresh("reload"), "the new provider's refresh runs")
+            with self.assertRaises(asyncio.CancelledError):
+                await old
+        asyncio.run(go())
+        self.assertEqual(len(self.cat.data["movie"]), 1000)
+        self.assertFalse(self.cat.refreshing)
+
     def test_provider_failure_is_recorded_with_backoff(self):
         self.run_refresh(catalogue(movies=1000))
         r = self.run_refresh(providers.ProviderError("xtream movies: provider answered HTTP 502 - live streams had loaded fine"),

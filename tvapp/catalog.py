@@ -152,10 +152,21 @@ class Catalogue:
                 log.warning("refresh event handler failed: %s", redact(e))
         return entry
 
+    def cancel_refresh(self) -> bool:
+        """Stop a refresh in progress (the provider changed: what it is fetching is the old one's)."""
+        t = getattr(self, "_running", None)
+        if t and not t.done():
+            t.cancel()
+            return True
+        return False
+
     async def refresh(self, reason: str = "") -> bool:
-        if self._lock.locked():
+        # a reload (new provider settings) waits for a cancelled refresh to let go; anything else
+        # finds one already running and leaves it to finish
+        if self._lock.locked() and reason != "reload":
             return False
         async with self._lock:
+            self._running = asyncio.current_task()
             self.refreshing = True
             t0 = time.time()
             try:
