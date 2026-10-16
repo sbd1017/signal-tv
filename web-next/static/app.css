@@ -1082,3 +1082,9 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .gap-add { justify-self: start; margin-top: 4px; }
 .gap-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 .gap-form .input { flex: 1 1 220px; min-width: 0; height: 34px; font-size: 13px; }
+
+/* Live: the other channels showing the match being watched */
+.also-on { display: grid; gap: 10px; margin: 18px 0 4px; }
+.also-on[hidden] { display: none; }
+.also-title { font: 650 12px var(--f-text); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.also-on > .btn { justify-self: start; }

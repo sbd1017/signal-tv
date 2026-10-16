@@ -695,7 +695,9 @@ async function renderLiveInfo(item, fresh = true) {
     h('div', { class: 'now-actions' }, favButton(item.id, { name: item.name, img: item.img, kind: 'live', num: item.num })));
   const keepTl = !fresh && infoFor === item.id && box.querySelector('.tl');
   const tl = keepTl || h('div', { class: 'tl' });
-  box.replaceChildren(card, tl);
+  const also = (!fresh && infoFor === item.id && box.querySelector('.also-on')) || h('section', { class: 'also-on', hidden: true });
+  box.replaceChildren(card, also, tl);
+  if (fresh || infoFor !== item.id) alsoShowing(item, also);
   if (keepTl || !nn) { if (!nn) tl.remove(); infoFor = item.id; return; }
   infoFor = item.id;
   try {
@@ -703,6 +705,27 @@ async function renderLiveInfo(item, fresh = true) {
     if (infoFor !== item.id) return;
     paintTimeline(tl, g.rows || []);
   } catch { tl.remove(); }
+}
+
+// Watching a match: the other channels showing it (the Sports view's grouping of the guide), so the
+// commentary - or the picture - can be changed without leaving Live. Ordered by the Sports commentary
+// preference, the best version for this device first; hidden channels left out.
+async function alsoShowing(item, box) {
+  let d;
+  try { d = await sportsData('today'); } catch { return; }
+  if (!box.isConnected || infoFor !== item.id) return;          // another channel's info by now
+  const mine = (c) => c.id === item.id || (c.ids || []).includes(item.id);
+  const ev = (d.events || []).find((e) => e.when === 'live' && (e.channels || []).some(mine));
+  const live = cached('live');
+  if (!ev || !live) { box.hidden = true; return; }
+  const feeds = visibleFeeds(ev.channels.filter((c) => !mine(c)), live, store.prefs.get('sportsFeeds', 'all'));
+  if (!feeds.length) { box.hidden = true; return; }
+  const SHOW = 8;
+  const row = h('div', { class: 'fx-feeds' }, ...feeds.slice(0, SHOW).map(feedButton));
+  const more = feeds.length > SHOW ? h('button', { class: 'btn ghost small', type: 'button', text: `${feeds.length - SHOW} more` }) : null;
+  if (more) more.addEventListener('click', () => { row.append(...feeds.slice(SHOW).map(feedButton)); more.remove(); });
+  box.replaceChildren(h('h3', { class: 'also-title', text: `Also showing ${ev.title}` }), row, ...(more ? [more] : []));
+  box.hidden = false;
 }
 
 function paintTimeline(tl, rows) {
