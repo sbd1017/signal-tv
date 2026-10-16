@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Res
 
 from tvapp import sports
 
-from . import config, fixtures, images, scores, sportsart
+from . import cast, config, fixtures, images, scores, sportsart
 
 log = logging.getLogger("tvnext")
 IMMUTABLE = "private, max-age=31536000, immutable"
@@ -32,6 +32,7 @@ class S:
     acq: sportsart.Acquirer
     fix: fixtures.Fixtures
     scores: scores.Scores
+    cast: cast.Cast
     flushed = 0.0
 
 
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
     S.acq = sportsart.Acquirer(S.lib, S.client)
     S.fix = fixtures.Fixtures(S.lib, S.acq.src, config.STATE / "fixtures.json")
     S.scores = scores.Scores(S.client)
+    S.cast = cast.Cast(S.client)
     tasks = [asyncio.create_task(S.acq.run()), asyncio.create_task(S.fix.run()), asyncio.create_task(_housekeeping())]
     yield
     S.lib.gaps.flush()
@@ -76,6 +78,34 @@ async def _housekeeping():
             S.lib.gaps.flush()
         except Exception as e:                     # housekeeping must never stop the service
             log.warning("housekeeping: %s", e)
+
+
+# ------------------------------------------------------------------ cast in the player (TMDB; optional)
+@route("GET", "/api/cast")
+async def cast_list(type: str = "", tmdb: int = 0, title: str = "", year: int = 0, s: int = 0, e: int = 0):
+    """type movie|tv; tmdb: the provider's TMDB number (0: found by exact title + year); s/e: an episode."""
+    if type not in ("movie", "tv") or not 0 <= tmdb < 10 ** 9 or len(title) > 200 or not 0 <= s < 1000 or not 0 <= e < 10000:
+        return JSONResponse({"error": "bad request"}, status_code=400)
+    if not tmdb and not title.strip():
+        return JSONResponse({"cast": None, "reason": "nothing to look up"})
+    d = await S.cast.lookup(type, tmdb, title, year if 1900 < year < 2100 else 0, s, e)
+    return JSONResponse({k: v for k, v in d.items() if k != "at"}, headers={"Cache-Control": "private, max-age=3600" if d.get("cast") else "no-store"})
+
+
+@route("GET", "/api/cast/status")
+async def cast_status():
+    return JSONResponse(S.cast.status(), headers={"Cache-Control": "no-store"})
+
+
+@route("GET", "/cast-img/{size}/{file}")
+async def cast_photo(size: str, file: str):
+    try:
+        p = await S.cast.photo(size, file)
+    except httpx.HTTPError:
+        p = None
+    if not p:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    return FileResponse(p, media_type="image/png" if file.endswith(".png") else "image/jpeg", headers={"Cache-Control": IMMUTABLE})
 
 
 # ------------------------------------------------------------------ images
@@ -220,6 +250,25 @@ async def art_file(kind: str, name: str, size: int):
 # ------------------------------------------------------------------ maintenance (loopback only)
 def _local(request: Request) -> bool:
     return request.client and request.client.host in ("127.0.0.1", "::1") and "x-forwarded-for" not in request.headers
+
+
+@app.post("/internal/tmdb-key")
+async def internal_tmdb_key(request: Request):
+    """The owner's TMDB key, from their Settings (forwarded by their app) or `iptv set-tmdb`: loopback only."""
+    if not _local(request):
+        return Response(status_code=404)
+    try:
+        body = await request.json()
+        key = str((body or {}).get("key") or "").strip()
+    except ValueError:
+        return JSONResponse({"error": "bad request"}, status_code=400)
+    if key:
+        problem = await S.cast.check_key(key)
+        if problem:
+            return JSONResponse({"error": problem}, status_code=400)
+    await asyncio.to_thread(S.cast.save_key, key)
+    log.info("TMDB key %s", "saved" if key else "removed")
+    return JSONResponse({"ok": True, **S.cast.status()})
 
 
 @app.get("/internal/{action}")

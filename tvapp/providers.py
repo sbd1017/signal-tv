@@ -433,6 +433,7 @@ class XtreamProvider:
             "rating": to_float(info.get("rating"), 0),
             "backdrop": http_url((bd[0] if isinstance(bd, list) and bd else bd) or "") if not isinstance(bd, dict) else "",
             "img2": http_url(info.get("movie_image") or info.get("cover_big") or ""),
+            "tmdb": tmdb_id(info.get("tmdb_id") or info.get("tmdb")),
         }
 
     async def series_info(self, http, series) -> tuple[dict, list]:
@@ -464,8 +465,15 @@ class XtreamProvider:
             "plot": clean_long(info.get("plot")), "genre": clean(info.get("genre"), 120),
             "cast": clean(info.get("cast"), 300),
             "backdrop": http_url((bd[0] if isinstance(bd, list) and bd else bd) or "") if not isinstance(bd, dict) else "",
+            "tmdb": tmdb_id(info.get("tmdb") or info.get("tmdb_id")),
         }
         return meta, eps
+
+
+def tmdb_id(value) -> int:
+    """The provider's TMDB number for a title (cast in the player, via the sidecar); 0 when it has none."""
+    s = str(value or "").strip()
+    return int(s) if s.isdigit() and 0 < len(s) <= 9 else 0
 
 
 def make_provider(s: Settings):

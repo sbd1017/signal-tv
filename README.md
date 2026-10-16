@@ -31,6 +31,8 @@ original, see [Signal TV Classic](https://github.com/sbd1017/signal-tv-classic).
 - Works as a home-screen app on iPhone, with picture-in-picture, AirPlay, lock-screen controls and
   keyboard shortcuts on a laptop.
 - Hide the channels and categories you never watch, on every device at once.
+- **More like this** on every film and series, and an optional **cast strip in the player** (who's in
+  the film or episode, with photos and characters) when you add a free TMDB key.
 - Daily backups, optional Telegram alerts when something breaks, and an `iptv` command for everything
   you'd do over SSH.
 
@@ -92,6 +94,27 @@ and a Cloudflare Tunnel in front, but any reverse proxy that does the same will 
 
 Set `TVN_ART_CONTACT` (in the artwork service's unit) to your own site or email: it's sent with the
 artwork lookups, as Wikimedia asks.
+
+## Cast in the player (optional)
+
+With a free [TMDB](https://www.themoviedb.org) API key, the player shows who is in the film or
+episode when its controls are showing: photos, characters, and an episode's guest stars.
+
+1. Make an account at themoviedb.org and confirm your email.
+2. Open **Settings › API**, choose **Create**, then **Developer**, accept the terms and fill in the short
+   form (type of use: Personal; application URL: this repository or your own site).
+3. Copy the **API Key** (or the longer **API Read Access Token**: either works).
+4. In the app, open **Settings › Cast in the player**, paste it and choose **Check and save**. Or on the
+   Pi, run `iptv set-tmdb` (hidden prompt; leave it empty to remove the key).
+
+The key is checked with TMDB first and kept on the Pi only (the artwork service's state directory),
+never in the code or the browser. Titles are matched by the TMDB number most Xtream panels send, or
+else by exact title and year. Cast lists are kept for 30 days and photos are served from the Pi.
+
+Each device can switch the strip off in **Settings › Cast in the player**. Without a key, nothing
+changes: the setting just explains how to add one.
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ## Tests
 

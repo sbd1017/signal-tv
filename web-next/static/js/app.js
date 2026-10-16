@@ -51,10 +51,12 @@ const player = new Player({
   nextEpisode: (item) => nextEpisode(item),
   onStarted: (item) => {
     if (item.kind === 'live') { markActiveChannel(item.id); renderLiveInfo(item); }
+    playerCast(item);
     ambient.reset();
     updateAmbient();
   },
   onClosed: (item) => {
+    playerCast(null);
     document.body.classList.remove('mini', 'on-air');
     if (item && item.kind === 'live') maybeIdle();
     if (['library', 'continue', 'favourites', 'recent'].includes(state.section)) render(true);
@@ -2015,6 +2017,52 @@ async function movieDetails(id) {
   enrichDetails('movies', d, page);
 }
 
+// ---- cast in the player (the Pi's tvnext/cast.py, from TMDB with the owner's key): who is in this film or
+// episode - its regulars, then the episode's guest stars - shown with the controls. Per device: Settings.
+const CAST_KEY = `${LSK}cast`;
+const castOn = () => lsGet(CAST_KEY, 'show') !== 'hide';
+let castFor = '';
+async function playerCast(item) {
+  const box = $('p-cast');
+  const id = item && (item.kind === 'movie' || item.kind === 'episode') ? item.id : '';
+  castFor = id;
+  if (!id || !castOn()) { box.hidden = true; box.replaceChildren(); return; }
+  box.hidden = true;
+  let q;
+  try {
+    if (item.kind === 'movie') {
+      const d = await api(`/movie/${item.id}`);
+      const f = names.film(d.name || item.name);
+      q = { type: 'movie', tmdb: d.tmdb || 0, title: f.title, year: d.year || f.year || 0 };
+    } else {
+      const d = await getSeries(item.series);
+      const f = names.film(d.name || item.seriesName || '');
+      q = { type: 'tv', tmdb: d.tmdb || 0, title: f.title, year: d.year || f.year || 0, s: item.season || 0, e: item.episode || 0 };
+    }
+  } catch { return; }
+  let r;
+  try {
+    const res = await fetch(`${NEXT}/api/cast?${new URLSearchParams(q)}`, { credentials: 'same-origin' });
+    r = res.ok ? await res.json() : null;
+  } catch { return; }
+  if (castFor !== id || !r || !r.cast || !r.cast.length) return;
+  const person = (p) => {
+    const face = h('span', { class: 'pc-face', 'aria-hidden': 'true', dataset: { i: p.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('') } });
+    if (p.photo) {
+      const im = h('img', { src: `${NEXT}/cast-img/w185/${p.photo}`, alt: '', decoding: 'async', loading: 'lazy' });
+      im.addEventListener('error', () => im.remove(), { once: true });
+      face.append(im);
+    }
+    return h('li', { class: `pc-person ${p.guest ? 'guest' : ''}` }, face,
+      h('span', { class: 'pc-text' }, h('b', { text: p.name }), p.character ? h('span', { text: p.character }) : null,
+        p.guest ? h('em', { text: 'Guest' }) : null));
+  };
+  box.replaceChildren(h('div', { class: 'pc-head' }, h('span', { text: item.kind === 'episode' ? 'In this episode' : 'Cast' }),
+    h('span', { class: 'pc-src', title: r.credit || '', text: 'TMDB' })),
+  h('ul', { class: 'pc-list', role: 'list' }, r.cast.map(person)));
+  box.hidden = false;
+}
+
 async function getSeries(id) {
   const c = state.seriesCache.get(id);
   if (c && Date.now() - c.at < 10 * 60000) return c.d;
@@ -2456,6 +2504,7 @@ function viewSettings() {
   const tracksBox = h('section', { class: 'panel', id: 'lib-tracks' });
   const uiBox = h('section', { class: 'panel', id: 'lib-interface' });
   const layoutBox = h('section', { class: 'panel', id: 'lib-layout' });
+  const castBox = h('section', { class: 'panel', id: 'lib-cast' });
   const timeBox = h('section', { class: 'panel', id: 'lib-time' });
   const famBox = h('section', { class: 'panel', id: 'lib-family', hidden: true });
   const sportsBox = h('section', { class: 'panel', id: 'lib-sports' });
@@ -2463,12 +2512,13 @@ function viewSettings() {
   const statusBox = h('section', { class: 'panel', id: 'lib-status' });
   const artBox = h('section', { class: 'panel', id: 'lib-artwork' });
   view.replaceChildren(head('Settings', 'Languages and sync are shared by all your devices'),
-    h('div', { class: 'settings' }, tracksBox, uiBox, layoutBox, timeBox, sportsBox, famBox, backupBox, statusBox),
+    h('div', { class: 'settings' }, tracksBox, uiBox, layoutBox, castBox, timeBox, sportsBox, famBox, backupBox, statusBox),
     h('div', { class: 'settings-group' }, h('h2', { class: 'section-title', text: 'Diagnostics' }),
       h('div', { class: 'settings' }, artBox)));
   renderTrackPrefs(tracksBox);
   renderInterface(uiBox);
   renderLayout(layoutBox);
+  renderCast(castBox);
   renderTimes(timeBox);
   sportsBox.replaceChildren(h('h2', { text: 'Sports' }),
     h('label', { class: 'pref-row' }, h('span', { text: 'Live scores' }),
@@ -2544,6 +2594,46 @@ function renderFamily(box) {
       h('p', { class: 'muted small', text: 'A new passphrase signs everyone out of that site; tell them the new one. Your own sign-in here is separate.' }));
   };
   draw();
+}
+
+// Cast in the player: on/off for this device; on the owner's own site, the TMDB key (kept on the Pi).
+async function renderCast(box) {
+  let st = { on: false, credit: '' };
+  try { st = await (await fetch(`${NEXT}/api/cast/status`, { credentials: 'same-origin' })).json(); } catch { /* no sidecar */ }
+  const sel = selectEl('Cast in the player', [['show', 'Show'], ['hide', 'Hide']], castOn() ? 'show' : 'hide', (v) => {
+    lsSet(CAST_KEY, v);
+    toast('Saved on this device');
+  });
+  const parts = [h('h2', { text: 'Cast in the player' })];
+  if (st.on) {
+    parts.push(h('label', { class: 'pref-row' }, h('span', { text: 'Show the cast' }), sel),
+      h('p', { class: 'muted small', text: 'Who is in the film or episode - with the episode’s guest stars - when the player’s controls are showing. Only this device changes.' }));
+  } else {
+    parts.push(h('p', { class: 'muted small', text: FAMILY ? 'Not set up on this TV.' : 'Shows who is in a film or episode in the player, with photos and characters. It needs a free TMDB API key: make an account at themoviedb.org, then Settings › API.' }));
+  }
+  if (!FAMILY) {
+    const input = h('input', { class: 'input', type: 'password', placeholder: st.on ? 'New key (replaces the saved one)' : 'TMDB API key or read access token',
+      autocomplete: 'off', spellcheck: 'false', 'data-lpignore': 'true', 'aria-label': 'TMDB API key' });
+    const save = h('button', { class: 'btn small primary', type: 'submit', text: 'Check and save' });
+    const off = st.on ? h('button', { class: 'btn small ghost', type: 'button', text: 'Remove key' }) : null;
+    const msg = h('p', { class: 'small', 'aria-live': 'polite' });
+    const send = async (key) => {
+      save.disabled = true;
+      msg.className = 'small muted';
+      msg.textContent = key ? 'Checking with TMDB…' : 'Removing…';
+      try {
+        await postJSON('/tmdb', { key });
+        toast(key ? 'TMDB key saved - cast shows in the player' : 'TMDB key removed');
+        renderCast(box);
+      } catch (e) { msg.className = 'small warn'; msg.textContent = e.message; save.disabled = false; }
+    };
+    const form = h('form', { class: 'family-actions', autocomplete: 'off' }, input, save, off);
+    form.addEventListener('submit', (e) => { e.preventDefault(); if (input.value.trim()) send(input.value.trim()); });
+    if (off) off.addEventListener('click', () => { if (confirm('Remove the TMDB key? The cast stops showing on every TV.')) send(''); });
+    parts.push(h('p', { class: 'muted small', text: st.on ? `Key saved on the Pi${st.set ? ` ${ago(st.set)}` : ''}; it’s never shown again. Used for every TV, family sites too.` : 'Kept on the Pi only, and checked with TMDB first.' }), form, msg);
+  }
+  if (st.credit) parts.push(h('p', { class: 'muted small', text: st.credit }));
+  box.replaceChildren(...parts);
 }
 
 function renderLayout(box) {

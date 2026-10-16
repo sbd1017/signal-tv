@@ -56,6 +56,7 @@ iptv - manage Signal TV (https://example.com/tv)
   iptv set-playlist        prompt for the M3U/M3U8 URL (hidden), switch to m3u, reload
   iptv set-epg             prompt for the XMLTV guide URL (hidden; empty = none), reload
   iptv set-xtream          prompt for Xtream server URL, username, password, switch to xtream, reload
+  iptv set-tmdb            prompt for a TMDB API key (cast in the player; empty = remove), checked with TMDB first
   iptv use-demo            point at the built-in demo provider (legal test streams), reload
   iptv demo on|off         start+enable / stop+disable the demo provider service
   iptv refresh             refresh catalogue + guide now (same as reload)
@@ -135,6 +136,21 @@ case "$cmd" in
     valid_url "$url" || { echo "That is not an http(s) URL."; exit 1; }
     setval IPTV_M3U_URL "$url"; setval IPTV_PROVIDER_TYPE m3u; unset url
     reload_app ;;
+  set-tmdb)
+    ask key "TMDB API key or read access token (input hidden; empty = remove)" secret
+    # to the sidecar on loopback, on stdin (never in argv); it checks the key with TMDB before keeping it
+    printf '%s' "$key" | python3 -c '
+import json, sys, urllib.request, urllib.error
+body = json.dumps({"key": sys.stdin.read().strip()}).encode()
+req = urllib.request.Request("http://127.0.0.1:8792/internal/tmdb-key", data=body, headers={"Content-Type": "application/json"})
+try:
+    d = json.loads(urllib.request.urlopen(req, timeout=40).read())
+    print("TMDB key saved: the cast shows in the player." if d.get("on") else "TMDB key removed.")
+except urllib.error.HTTPError as e:
+    print(json.loads(e.read() or b"{}").get("error") or f"HTTP {e.code}"); sys.exit(1)
+except OSError as e:
+    print(f"The artwork service (signal-tv-next) is not answering: {e}"); sys.exit(1)'
+    unset key ;;
   set-epg)
     if [ $# -ge 1 ]; then warn_argv; url=$1; else ask url "XMLTV guide URL, .xml or .xml.gz (input hidden; empty = none)" secret; fi
     if [ -n "$url" ]; then valid_url "$url" || { echo "That is not an http(s) URL."; exit 1; }; fi

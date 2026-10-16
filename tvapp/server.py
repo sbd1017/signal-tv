@@ -653,6 +653,34 @@ async def family_change(name: str, action: str, request: Request):
     return jresp(request, {"ok": True})
 
 
+# ---- the owner's TMDB key (cast in the player): kept by the sidecar, which does the lookups for every site
+SIDECAR = os.environ.get("TV_SIDECAR", "http://127.0.0.1:8792")
+
+
+@app.post("/tv/api/tmdb")
+async def tmdb_key(request: Request):
+    if S.settings.auth != "nginx":
+        return Response(status_code=404)
+    if not write_allowed(request):
+        return err(request, 403, "Not allowed")
+    try:
+        body = await read_json(request)
+    except StateError as e:
+        return err(request, 400, str(e))
+    key = body.get("key") if isinstance(body, dict) else None
+    if not isinstance(key, str) or len(key) > 2000:
+        return err(request, 400, "Paste the key from themoviedb.org › Settings › API.")
+    try:
+        r = await S.http.post(f"{SIDECAR}/internal/tmdb-key", json={"key": key.strip()}, timeout=httpx.Timeout(5, read=30))
+        d = r.json()
+    except (httpx.HTTPError, ValueError):
+        return err(request, 502, "The artwork service on the Pi isn't answering (signal-tv-next).")
+    if r.status_code != 200:
+        return err(request, 400, d.get("error") or f"HTTP {r.status_code}")
+    log.info("TMDB key %s from the owner's Settings", "set" if key.strip() else "removed")
+    return jresp(request, d)
+
+
 # ---- a family site's provider, from the owner's Settings (forwarded by the owner's app on loopback only)
 @app.get("/tv/api/internal/provider")
 async def internal_provider(request: Request):
@@ -907,7 +935,7 @@ async def movie(iid: str, request: Request):
         "genre": info.get("genre", it.get("genre", "")), "cast": info.get("cast", ""),
         "director": info.get("director", ""), "dur": info.get("dur") or it.get("dur", 0),
         "img": img_key(it.get("img") or info.get("img2", "")), "backdrop": img_key(info.get("backdrop", "")),
-        "cat": S.cat.data["cats"]["movie"].get(it.get("cat", ""), ""),
+        "cat": S.cat.data["cats"]["movie"].get(it.get("cat", ""), ""), "tmdb": info.get("tmdb", 0),
     })
 
 
@@ -956,7 +984,7 @@ async def series_one(iid: str, request: Request):
         "cast": meta.get("cast", ""), "img": img_key(ser.get("img", "")),
         "backdrop": img_key(meta.get("backdrop") or ser.get("backdrop", "")),
         "cat": S.cat.data["cats"]["series"].get(ser.get("cat", ""), ""),
-        "seasons": [{"n": n, "episodes": v} for n, v in sorted(seasons.items())],
+        "seasons": [{"n": n, "episodes": v} for n, v in sorted(seasons.items())], "tmdb": meta.get("tmdb", 0),
     })
 
 

@@ -344,6 +344,7 @@ iptv config              edit /etc/signal-tv/tv.env (sudoedit), then reload
 iptv set-playlist        hidden prompt for the M3U URL -> provider m3u -> reload
 iptv set-epg             hidden prompt for the XMLTV URL (empty = none) -> reload
 iptv set-xtream          prompts: server URL, username, password (hidden) -> provider xtream -> reload
+iptv set-tmdb            hidden prompt for a TMDB key (cast in the player; empty = remove), checked first
 iptv set-provider m3u|xtream
 iptv use-demo            back to the built-in demo provider
 iptv demo on|off         start/enable or stop/disable the demo provider service

@@ -42,7 +42,7 @@ class FamilySh(unittest.TestCase):
         self.assertIn("include snippets/signal-tv-family-*.conf;", (self.t / "snippets" / "signal-tv.conf").read_text())
         site = (self.t / "site.conf").read_text()
         self.assertIn("POST:/mumtv/(api/(state(/import)?|login|logout)|next/api/art/gaps)$", site)
-        self.assertIn("POST:/tv/api/family/", site)
+        self.assertIn("POST:/tv/api/(family/", site)
         ui = self.t / "ui" / "signal-tv-ui-mumtv"
         self.assertTrue((ui / "new" / "index.html").is_file())
         self.assertEqual(os.readlink(ui / "default"), "new")
@@ -50,7 +50,7 @@ class FamilySh(unittest.TestCase):
         # a second one gets the next port; the owner's map line isn't repeated
         self.assertEqual(self.run_sh("add", "josephtv").returncode, 0)
         self.assertIn("TV_PORT=8794", (self.t / "fam" / "josephtv.site").read_text())
-        self.assertEqual((self.t / "site.conf").read_text().count("POST:/tv/api/family/"), 1)
+        self.assertEqual((self.t / "site.conf").read_text().count("POST:/tv/api/(family/"), 1)
         out = self.run_sh("list").stdout
         self.assertIn("mumtv", out)
         self.assertIn("josephtv", out)
@@ -71,7 +71,7 @@ class FamilySh(unittest.TestCase):
         site = (self.t / "site.conf").read_text()
         self.assertNotIn("/josephtv/", site)
         self.assertIn("POST:/mumtv/", site, "the other site stays")
-        self.assertIn("POST:/tv/api/family/", site)
+        self.assertIn("POST:/tv/api/(family/", site)
         self.assertTrue((self.t / "snippets" / "signal-tv-family-mumtv.conf").exists())
         self.assertNotIn("josephtv", self.run_sh("list").stdout)
         self.assertNotEqual(self.run_sh("remove", "josephtv").returncode, 0, "gone already")
