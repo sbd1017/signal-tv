@@ -1034,3 +1034,9 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .fx-score:empty { display: none; }
 .fx-clock { font: 700 12px/1 var(--f-num); letter-spacing: .04em; color: var(--text); padding: 4px 8px 3px; border-radius: 999px;
   background: rgba(255, 255, 255, .1); flex: none; font-variant-numeric: tabular-nums; }
+
+/* Settings › Family sites: provider */
+.family-prov { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; }
+.prov-form { display: grid; gap: 10px; padding: 12px 0 4px; }
+.prov-form .seg { justify-self: start; }
+.prov-form[hidden], .prov-form .pref-row[hidden] { display: none; }

@@ -2505,9 +2505,17 @@ function renderFamily(box) {
       out.addEventListener('click', () => {
         if (confirm(`Sign every device out of ${s.base}? They'll need the passphrase again.`)) go(() => postJSON(`/family/${s.name}/signout`), `${s.name}: everyone signed out`);
       });
+      const pv = s.provider;
+      const provText = !pv ? '' : pv.configured
+        ? `Provider: ${pv.type === 'xtream' ? 'Xtream account' : 'playlist link'}${pv.port ? ` (port ${pv.port})` : ''}, set ${pv.source === 'web' ? 'here' : 'on the Pi'} ${ago(pv.changed)}.`
+        : 'Provider: not set up yet.';
+      const provBtn = h('button', { class: 'btn small ghost', type: 'button', text: pv && pv.configured ? 'Change provider' : 'Set up provider', hidden: !s.up });
+      const provForm = providerForm(s, draw);
+      provBtn.addEventListener('click', () => { provForm.hidden = !provForm.hidden; if (!provForm.hidden) provForm.querySelector('input').focus(); });
       return h('div', { class: 'family-site' },
         h('div', { class: 'family-head' }, h('b', { text: s.name }), h('a', { href: `${s.base}/`, target: '_blank', rel: 'noopener', text: `${location.host}${s.base}` })),
         h('p', { class: `small ${state.cls === 'warn' ? 'warn' : 'muted'}`, text: state.text }),
+        provText ? h('div', { class: 'family-prov' }, h('p', { class: 'muted small', text: provText }), provBtn) : null, provForm,
         h('p', { class: 'muted small', text: s.passphrase ? `Passphrase set ${ago(s.changed)}${s.signed_out > s.changed ? ` · everyone signed out ${ago(s.signed_out)}` : ''}.` : 'No passphrase yet: nobody can open it until you set one.' }),
         h('div', { class: 'family-actions' }, input, save, out));
     });
@@ -2533,6 +2541,50 @@ function renderLayout(box) {
     h('label', { class: 'pref-row' }, h('span', { text: 'Open on' }), startSel),
     h('label', { class: 'pref-row' }, h('span', { text: 'Sports tab' }), sportsSel),
     h('p', { class: 'muted small', text: 'Only this device changes: a TV or phone that never needs Sports can leave it out, and open straight to the page it’s used for. Search still finds sports channels and programmes.' }));
+}
+
+// A family site's provider: an Xtream account (server, username, password) or a playlist link. The site
+// checks them with the provider before keeping them; they are never shown again (tvapp/family.py).
+function providerForm(s, done) {
+  let kind = 'xtream';
+  const field = (label, attrs) => {
+    const inp = h('input', { class: 'input', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'data-lpignore': 'true', 'aria-label': label, ...attrs });
+    return [h('label', { class: 'pref-row' }, h('span', { text: label }), inp), inp];
+  };
+  const [baseRow, base] = field('Server', { type: 'url', placeholder: 'http://example.com:8080', inputmode: 'url' });
+  const [userRow, user] = field('Username', { type: 'text' });
+  const [passRow, pass] = field('Password', { type: 'password' });
+  const [linkRow, link] = field('Playlist link', { type: 'url', placeholder: 'http://…/get.php?username=…', inputmode: 'url' });
+  const msg = h('p', { class: 'small', 'aria-live': 'polite' });
+  const save = h('button', { class: 'btn small primary', type: 'submit', text: 'Check and save' });
+  const paint = () => { for (const r of [baseRow, userRow, passRow]) r.hidden = kind !== 'xtream'; linkRow.hidden = kind !== 'm3u'; };
+  const kinds = seg('Provider type', [['xtream', 'Server + login'], ['m3u', 'Playlist link']], kind, (v) => { kind = v; paint(); msg.textContent = ''; });
+  const form = h('form', { class: 'prov-form', hidden: true, autocomplete: 'off' }, kinds, baseRow, userRow, passRow, linkRow,
+    h('div', { class: 'family-actions' }, save, msg),
+    h('p', { class: 'muted small', text: 'Use the details from the provider’s welcome email. They are checked with the provider first, kept only on the Pi for this site, and never shown here again.' }));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    save.disabled = true;
+    msg.className = 'small muted';
+    msg.textContent = 'Checking with the provider…';
+    const body = kind === 'xtream' ? { type: 'xtream', base: base.value, username: user.value, password: pass.value } : { type: 'm3u', url: link.value };
+    try {
+      const d = await postJSON(`/family/${s.name}/provider`, body);
+      for (const i of [base, user, pass, link]) i.value = '';
+      const exp = d.check && d.check.expires ? ` The account runs until ${fmtDate(d.check.expires, { day: 'numeric', month: 'short', year: 'numeric' })}.` : '';
+      toast(`${s.name}: provider accepted - loading channels`);
+      msg.className = 'small';
+      msg.textContent = `Accepted.${exp} Channels, films and series load in the next minute or two.`;
+      setTimeout(done, 4000);
+    } catch (err) {
+      msg.className = 'small warn';
+      msg.textContent = err.message;
+    } finally {
+      save.disabled = false;
+    }
+  });
+  paint();
+  return form;
 }
 
 // Times: the Pi's zone (the guide's home) or this device's own. Per device: a laptop abroad can show

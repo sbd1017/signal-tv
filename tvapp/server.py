@@ -589,6 +589,9 @@ async def family_list(request: Request):
                 h = r.json()
                 info.update(up=True, configured=h.get("configured"), counts=h.get("counts"), updated=h.get("updated"),
                             error=h.get("error"), streams=h.get("streams"))
+                p = await S.http.get(f"http://127.0.0.1:{site['port']}/tv/api/internal/provider", timeout=2)
+                if p.status_code == 200:
+                    info["provider"] = p.json()
         except (httpx.HTTPError, ValueError):
             pass
         out.append(info)
@@ -597,12 +600,31 @@ async def family_list(request: Request):
 
 @app.post("/tv/api/family/{name}/{action}")
 async def family_change(name: str, action: str, request: Request):
-    if S.settings.auth != "nginx" or action not in ("passphrase", "signout"):
+    if S.settings.auth != "nginx" or action not in ("passphrase", "signout", "provider"):
         return Response(status_code=404)
     if not write_allowed(request):
         return err(request, 403, "Not allowed")
-    if name not in {s["name"] for s in family.sites(S.settings.family_dir)}:
+    site = next((s for s in family.sites(S.settings.family_dir) if s["name"] == name), None)
+    if not site:
         return err(request, 404, "No such family site")
+    if action == "provider":
+        # the family site checks the details with its provider and keeps them; they pass through here only
+        try:
+            body = await read_json(request)
+            r = await S.http.post(f"http://127.0.0.1:{site['port']}/tv/api/internal/provider", json=body,
+                                  timeout=httpx.Timeout(10, read=60))
+        except StateError as e:
+            return err(request, 400, str(e))
+        except httpx.HTTPError:
+            return err(request, 502, f"{name} isn't running. Start it on the Pi: iptv family restart")
+        try:
+            d = r.json()
+        except ValueError:
+            d = {}
+        if r.status_code != 200:
+            return err(request, 400 if r.status_code == 400 else 502, d.get("error") or f"{name} answered HTTP {r.status_code}")
+        log.info("family site %s: provider set from the owner's Settings (%s)", name, (d.get("provider") or {}).get("type"))
+        return jresp(request, d)
     path = family.record_path(S.settings.state_dir, name)
     if action == "signout":
         await asyncio.to_thread(family.sign_out_all, path)
@@ -619,6 +641,34 @@ async def family_change(name: str, action: str, request: Request):
     await asyncio.to_thread(family.set_passphrase, path, phrase)
     log.info("family site %s: new passphrase set (by the owner); everyone signed out", name)
     return jresp(request, {"ok": True})
+
+
+# ---- a family site's provider, from the owner's Settings (forwarded by the owner's app on loopback only)
+@app.get("/tv/api/internal/provider")
+async def internal_provider(request: Request):
+    if S.settings.auth != "passphrase" or not direct_local(request):
+        return Response(status_code=404)
+    return jresp(request, family.provider_summary(S.settings))
+
+
+@app.post("/tv/api/internal/provider")
+async def internal_provider_set(request: Request):
+    if S.settings.auth != "passphrase" or not direct_local(request):
+        return Response(status_code=404)
+    try:
+        body = await read_json(request)
+    except StateError as e:
+        return err(request, 400, str(e))
+    values, problem = family.parse_provider(body)
+    if not values:
+        return err(request, 400, problem)
+    problem, info = await family.check_provider(S.http, values, S.settings.user_agent)
+    if problem:
+        return err(request, 400, problem)
+    await asyncio.to_thread(family.write_provider, S.settings.state_dir, values)
+    log.info("provider set from the owner's Settings (%s); refreshing", values["IPTV_PROVIDER_TYPE"])
+    reload_config()
+    return jresp(request, {"ok": True, "check": info, "provider": family.provider_summary(S.settings)})
 
 
 # -------------------------------------------------------------- catalogue

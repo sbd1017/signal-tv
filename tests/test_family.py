@@ -1,6 +1,10 @@
 """Family sites: one passphrase per site, set by the owner (also from the owner's own Settings), sessions
 that end when it changes, and the site at its own address (tvapp/family.py)."""
+import asyncio
 import dataclasses
+import os
+import time
+from unittest import mock
 import json
 import tempfile
 import unittest
@@ -173,6 +177,84 @@ class OwnersPanel(unittest.TestCase):
         self.assertEqual(self.c.post("/tv/api/family/mumtv/signout", headers=WRITE).status_code, 200)
         self.assertEqual(family.read_record(self.d / "family" / "mumtv.json")["gen"], gen + 1)
         self.assertTrue(self.c.get("/tv/api/family").json()["sites"][0]["passphrase"])
+
+
+class Provider(unittest.TestCase):
+    """The owner sets a family site's provider from Settings: read, checked with the provider, kept."""
+
+    def test_form(self):
+        v, why = family.parse_provider({"type": "xtream", "base": "line.example.com:8080/", "username": "u", "password": "p"})
+        self.assertEqual(v, {"IPTV_PROVIDER_TYPE": "xtream", "XTREAM_BASE_URL": "http://line.example.com:8080", "XTREAM_USERNAME": "u",
+                             "XTREAM_PASSWORD": "p"})
+        v, _ = family.parse_provider({"type": "m3u", "url": "http://line.example.com:8080/get.php?username=u&password=p&type=m3u_plus"})
+        self.assertEqual(v["IPTV_PROVIDER_TYPE"], "xtream", "an Xtream link is kept as the account it is")
+        self.assertEqual((v["XTREAM_BASE_URL"], v["XTREAM_USERNAME"]), ("http://line.example.com:8080", "u"))
+        v, _ = family.parse_provider({"type": "m3u", "url": "https://cdn.example.com/list.m3u8"})
+        self.assertEqual(v, {"IPTV_PROVIDER_TYPE": "m3u", "IPTV_M3U_URL": "https://cdn.example.com/list.m3u8"})
+        for bad in ({"type": "xtream", "base": "x", "username": "", "password": "p"}, {"type": "m3u", "url": "ftp://x"},
+                    {"type": "xtream", "base": "http://a.b", "username": "u\nX=1", "password": "p"}, {"type": "other"}):
+            self.assertIsNone(family.parse_provider(bad)[0], bad)
+
+    def check(self, handler, values):
+        import httpx
+        async def go():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
+                return await family.check_provider(c, values, "ua")
+        return asyncio.run(go())
+
+    def test_check_says_what_is_wrong(self):
+        import httpx
+        x = {"IPTV_PROVIDER_TYPE": "xtream", "XTREAM_BASE_URL": "http://line.example.com:8080", "XTREAM_USERNAME": "u", "XTREAM_PASSWORD": "p"}
+        ok = self.check(lambda r: httpx.Response(200, json={"user_info": {"auth": 1, "status": "Active", "exp_date": "1800000000"}}), x)
+        self.assertEqual((ok[0], ok[1]["expires"]), ("", 1800000000))
+        self.assertIn("doesn't recognise that address",
+                      self.check(lambda r: httpx.Response(400, json={"error": "Unrecognised server hostname."}), x)[0])
+        self.assertIn("refused", self.check(lambda r: httpx.Response(200, json={"user_info": {"auth": 0}}), x)[0])
+        self.assertIn("expired", self.check(lambda r: httpx.Response(200, json={"user_info": {"auth": 1, "status": "Expired"}}), x)[0])
+        def refuse(r):
+            raise httpx.ConnectError("refused")
+        self.assertIn("line.example.com:8080", self.check(refuse, x)[0])
+        m = {"IPTV_PROVIDER_TYPE": "m3u", "IPTV_M3U_URL": "http://cdn.example.com/a.m3u"}
+        self.assertEqual(self.check(lambda r: httpx.Response(200, content=b"#EXTM3U\n#EXTINF:-1,A\nhttp://x/1.ts\n"), m)[0], "")
+        self.assertIn("didn't return a playlist", self.check(lambda r: httpx.Response(200, content=b"<html>"), m)[0])
+
+    def test_saved_last_wins(self):
+        from tvapp import config as cfg
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            env = d / "mumtv.env"
+            env.write_text("IPTV_PROVIDER_TYPE=xtream\nXTREAM_BASE_URL=http://old.example.com\nXTREAM_USERNAME=a\nXTREAM_PASSWORD=b\n")
+            with mock.patch.object(cfg, "CONFIG_PATH", env), \
+                    mock.patch.dict(os.environ, {"STATE_DIRECTORY": str(d / "state"), "TV_AUTH": "passphrase"}):
+                self.assertEqual(cfg.load().provider_source, "file")
+                p = family.write_provider(d / "state", {"IPTV_PROVIDER_TYPE": "m3u", "IPTV_M3U_URL": "http://new.example.com/l.m3u"})
+                self.assertEqual(oct(p.stat().st_mode & 0o777), "0o600")
+                os.utime(env, (time.time() - 60, time.time() - 60))
+                s = cfg.load()
+                self.assertEqual((s.provider_source, s.provider_type, s.m3u_url), ("web", "m3u", "http://new.example.com/l.m3u"))
+                os.utime(env, None)                                   # `iptv family mumtv set-xtream` afterwards
+                os.utime(p, (time.time() - 60, time.time() - 60))
+                self.assertEqual((cfg.load().provider_source, cfg.load().xtream_base), ("file", "http://old.example.com"))
+                with mock.patch.dict(os.environ, {"TV_AUTH": ""}):
+                    os.utime(p, None)
+                    self.assertEqual(cfg.load().provider_source, "file", "the owner's own site never reads it")
+
+    def test_internal_endpoint_is_loopback_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            server.S.settings = dataclasses.replace(settings(d), base="/mumtv", auth="passphrase", site="mumtv",
+                                                    access_file=d / "rec.json", classic=False)
+            server.S.keys = Keys(d)
+            server.S.access = family.Access(d / "rec.json")
+            server.S.throttle = family.Throttle()
+            outside = TestClient(server.app)
+            self.assertIn(outside.get("/tv/api/internal/provider", headers=NGINX).status_code, (401, 404))
+            self.assertIn(outside.post("/tv/api/internal/provider", json={"type": "m3u", "url": "http://x/a.m3u"}, headers=NGINX).status_code, (401, 404))
+            local = TestClient(server.app, client=("127.0.0.1", 50000))
+            r = local.get("/tv/api/internal/provider")
+            self.assertEqual(r.status_code, 200)
+            self.assertNotIn("password", r.text.lower())
+            self.assertEqual(local.post("/tv/api/internal/provider", json={"type": "xtream", "base": "", "username": "", "password": ""}).status_code, 400)
 
 
 if __name__ == "__main__":

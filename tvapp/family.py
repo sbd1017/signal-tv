@@ -184,6 +184,124 @@ def record_path(state_dir: Path, name: str) -> Path:
     return state_dir / "family" / f"{name}.json"
 
 
+# ------------------------------------------------------------------ the provider, set from the owner's Settings
+# The owner's app forwards the form to the family site on loopback; the site checks the details with
+# the provider first and only then keeps them (<its state>/provider.env, 0600; tvapp/config.py prefers
+# whichever of that and its TV_CONFIG was saved last). Nothing here ever logs or returns the details.
+def parse_provider(body: dict) -> tuple[dict | None, str]:
+    """The form -> config values, or (None, why not). An Xtream "get.php?username=…&password=…" link
+    pasted as a playlist is kept as the Xtream account it is (films and series come with it)."""
+    from urllib.parse import parse_qs, urlsplit
+    if not isinstance(body, dict):
+        return None, "Nothing to save."
+    kind = body.get("type")
+    clean = lambda k: str(body.get(k) or "").strip()                     # noqa: E731
+    if any("\n" in clean(k) or "\r" in clean(k) for k in ("base", "username", "password", "url")):
+        return None, "One line per field, please."
+    if kind == "m3u":
+        url = clean("url")
+        u = urlsplit(url)
+        if u.scheme not in ("http", "https") or not u.hostname or len(url) > 2000:
+            return None, "Paste the whole playlist link, starting with http:// or https://."
+        q = parse_qs(u.query)
+        if u.path.rstrip("/").endswith("get.php") and q.get("username") and q.get("password"):
+            return {"IPTV_PROVIDER_TYPE": "xtream", "XTREAM_BASE_URL": f"{u.scheme}://{u.netloc}",
+                    "XTREAM_USERNAME": q["username"][0], "XTREAM_PASSWORD": q["password"][0]}, ""
+        return {"IPTV_PROVIDER_TYPE": "m3u", "IPTV_M3U_URL": url}, ""
+    if kind == "xtream":
+        base, user, pw = clean("base").rstrip("/"), clean("username"), clean("password")
+        if base and "://" not in base:
+            base = "http://" + base
+        u = urlsplit(base)
+        if u.scheme not in ("http", "https") or not u.hostname:
+            return None, "The server address should look like http://example.com:8080."
+        if not user or not pw:
+            return None, "Fill in the username and password."
+        return {"IPTV_PROVIDER_TYPE": "xtream", "XTREAM_BASE_URL": f"{u.scheme}://{u.netloc}", "XTREAM_USERNAME": user,
+                "XTREAM_PASSWORD": pw}, ""
+    return None, "Choose an Xtream account or a playlist link."
+
+
+async def check_provider(http, values: dict, user_agent: str) -> tuple[str, dict]:
+    """Ask the provider before keeping the details: ("", info) when it accepts them, else (what's wrong, {})."""
+    import httpx
+    from urllib.parse import urlsplit
+    xtream = values["IPTV_PROVIDER_TYPE"] == "xtream"
+    url = values["XTREAM_BASE_URL"] + "/player_api.php" if xtream else values["IPTV_M3U_URL"]
+    u = urlsplit(url)
+    where = f"{u.hostname}:{u.port or (443 if u.scheme == 'https' else 80)}"
+    params = {"username": values["XTREAM_USERNAME"], "password": values["XTREAM_PASSWORD"]} if xtream else None
+    try:
+        async with http.stream("GET", url, params=params, headers={"User-Agent": user_agent},
+                               timeout=httpx.Timeout(15, read=40)) as r:
+            head = b""
+            async for chunk in r.aiter_bytes():
+                head += chunk
+                if len(head) > 65536:
+                    break
+            code = r.status_code
+    except httpx.ConnectError:
+        return f"Couldn't connect to {where}. Check the address and the port (many providers use :8080).", {}
+    except httpx.TimeoutException:
+        return f"{where} didn't answer in time. Check the address, or try again later.", {}
+    except httpx.HTTPError as e:
+        return f"Couldn't reach {where} ({type(e).__name__}).", {}
+    low = head[:400].lower()
+    if code == 400 and b"hostname" in low:
+        return "The provider's server doesn't recognise that address. Use the exact server URL from the provider's details.", {}
+    if code in (401, 403) or (xtream and code == 200 and b'"auth":0' in head.replace(b" ", b"")):
+        return "The provider refused that username and password.", {}
+    if code == 404:
+        return "Nothing at that address (404). Check the link or server URL.", {}
+    if code != 200:
+        return f"The provider answered HTTP {code}.", {}
+    if not xtream:
+        if not head.lstrip(b"\xef\xbb\xbf \r\n\t").startswith(b"#EXTM3U"):
+            return "That link didn't return a playlist (no #EXTM3U at the start).", {}
+        return "", {"type": "m3u"}
+    try:
+        ui = json.loads(head).get("user_info") or {}
+    except ValueError:
+        return "That address answered, but not as an Xtream server. Check the server URL.", {}
+    if str(ui.get("auth")) != "1":
+        return "The provider refused that username and password.", {}
+    status = str(ui.get("status") or "")
+    if status and status.lower() != "active":
+        return f"The provider says the account is {status.lower()}.", {}
+    try:
+        exp = int(ui.get("exp_date") or 0)
+    except (TypeError, ValueError):
+        exp = 0
+    return "", {"type": "xtream", "expires": exp, "connections": ui.get("max_connections")}
+
+
+def write_provider(state_dir: Path, values: dict) -> Path:
+    path = state_dir / "provider.env"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(f".{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write("# set from the owner's Settings > Family sites; `iptv family NAME set-…` saved later wins\n")
+        for k, v in values.items():
+            fh.write(f"{k}={v}\n")
+    os.replace(tmp, path)
+    return path
+
+
+def provider_summary(s) -> dict:
+    """What the owner sees: the kind, the port, where it was set and when - never the details."""
+    from urllib.parse import urlsplit
+    url = s.xtream_base if s.provider_type == "xtream" else s.m3u_url
+    u = urlsplit(url) if url else None
+    src = (s.state_dir / "provider.env") if s.provider_source == "web" else Path(os.environ.get("TV_CONFIG", ""))
+    try:
+        changed = int(src.stat().st_mtime)
+    except OSError:
+        changed = 0
+    return {"type": s.provider_type, "configured": s.configured, "port": (u.port or (443 if u.scheme == "https" else 80)) if u else None,
+            "source": s.provider_source, "changed": changed}
+
+
 # ------------------------------------------------------------------ iptv family NAME passphrase|signout|clear
 def main(argv=None) -> int:
     """Run as the app's user (iptv does: sudo -u signal-tv). The passphrase comes on stdin, never argv."""

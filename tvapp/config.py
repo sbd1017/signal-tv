@@ -129,6 +129,7 @@ class Settings:
     access_file: Path | None = None          # the family site's passphrase record (written by the owner's app)
     classic: bool = True                     # offer the classic interface (needs the /tv base: not on family sites)
     family_dir: Path = Path("/etc/signal-tv-family")   # the owner's app: <site>.site files describing each family site
+    provider_source: str = "file"            # "file" (TV_CONFIG, `iptv set-…`) or "web" (<state>/provider.env, the owner's Settings)
 
     @property
     def configured(self) -> bool:
@@ -137,9 +138,26 @@ class Settings:
         return bool(self.m3u_url)
 
 
+PROVIDER_KEYS = ("IPTV_PROVIDER_TYPE", "IPTV_M3U_URL", "IPTV_EPG_URL", "XTREAM_BASE_URL", "XTREAM_USERNAME", "XTREAM_PASSWORD")
+
+
+def _mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def load() -> Settings:
-    env = read_env()
+    env = read_env(CONFIG_PATH)
     state = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/signal-tv").split(":")[0])
+    # A family site's provider can also be set from the owner's Settings (written to <state>/provider.env,
+    # tvapp/family.py). Whichever was saved last wins: that file, or TV_CONFIG (`iptv family NAME set-…`).
+    web = state / "provider.env"
+    source = "file"
+    if os.environ.get("TV_AUTH", "").strip() == "passphrase" and _mtime(web) > _mtime(CONFIG_PATH):
+        env = {k: v for k, v in env.items() if k not in PROVIDER_KEYS} | {k: v for k, v in read_env(web).items() if k in PROVIDER_KEYS}
+        source = "web"
     cache = Path(os.environ.get("CACHE_DIRECTORY", "/var/cache/signal-tv").split(":")[0])
     return Settings(
         provider_type=(env.get("IPTV_PROVIDER_TYPE") or "m3u").strip().lower(),
@@ -154,6 +172,7 @@ def load() -> Settings:
         max_live=int(max(1, _num(env, "IPTV_MAX_LIVE_STREAMS", 2))),
         max_vod=int(max(1, _num(env, "IPTV_MAX_VOD_REMUX", 2))),
         state_dir=state,
+        provider_source=source,
         cache_dir=cache,
         live_dir=Path(os.environ.get("TV_LIVE_DIR", "/dev/shm/signal-tv")),
         vod_dir=cache / "vod",
