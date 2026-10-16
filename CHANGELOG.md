@@ -2,6 +2,11 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.6.0 - 2026-10-16
+
+- Sports: a guide's short club name joins the full listing; feed codes aren't matches; channel-name markers dropped
+- Crests for unlisted clubs: ESPN's club lists and Wikidata when TheSportsDB has nothing (or is down)
+
 ## v1.5.0 - 2026-10-16
 
 - Cast in the player, from TMDB (optional): who's in the film or episode, with photos and characters
