@@ -255,6 +255,14 @@ class Events(unittest.TestCase):
         self.assertEqual((acl[0]["comp"], acl[0]["sport"]), ("AFC Champions League", "football"))
 
 
+class Clusters(unittest.TestCase):
+    def test_listings_with_no_length_are_one_airing(self):
+        # three channels list "Washington @ Purdue" as 01:00-01:00
+        rows = [(NOW, NOW, ch, 0) for ch in (1, 2, 3)]
+        self.assertEqual(len(epgsearch.sport_clusters(rows)), 1)
+        self.assertEqual(len(epgsearch.sport_clusters([(NOW, NOW + H, 1, 0), (NOW + 3 * H, NOW + 4 * H, 1, 0)])), 2)
+
+
 class Replays(unittest.TestCase):
     def test_whole_earlier_airing_makes_a_replay(self):
         guide = {"l_sky": [row(-3, 2, "Live Monday Night Football: Coventry v Newcastle")],    # 20:00-22:00, ended

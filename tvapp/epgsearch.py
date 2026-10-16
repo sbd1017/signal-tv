@@ -70,7 +70,7 @@ def sport_clusters(rows: list) -> list[list]:
             out.append(cur)
         cur.append(r)
         counts[r[0]] = counts.get(r[0], 0) + 1
-        stop = max(stop, r[1])
+        stop = max(stop, r[1], r[0] + 1)            # a listing with no length ("01:00-01:00") still overlaps its twins
     return out
 
 
