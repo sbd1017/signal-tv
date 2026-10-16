@@ -499,15 +499,16 @@ team:liechtenstein = Liechtenstein
 
 @competition football
 comp:premier-league = Premier League | English Premier League | EPL | Barclays Premier League | Premier liga ; weak: PL ; priority: 100 ; not after: indian bangladesh caribbean pakistan lanka lankan egyptian egypt nigeria nigerian ghana ghanaian kenyan kenya russian ukrainian israeli welsh kong armenian belarusian kazakhstan tanzanian maltese jamaica jamaican lebanese singapore malaysian canadian hockey netball volleyball basketball darts snooker kabaddi ; not before: darts netball hockey kabaddi
-comp:uefa-champions-league = UEFA Champions League | Champions League | UCL | Champions-League | Liga de Campeones | Ligue des champions | Liga dos Campeoes ; priority: 100 ; not after: afc caf ehf cev concacaf ofc global asian african basketball hockey volleyball womens t20 velux
+comp:uefa-champions-league = UEFA Champions League | Champions League | UCL | Champions-League | Liga de Campeones | Ligue des champions | Liga dos Campeoes | Liga Mistrzów ; priority: 100 ; not after: afc caf ehf cev concacaf ofc global asian african basketball hockey volleyball womens t20 velux
 comp:uefa-womens-champions-league = UEFA Women's Champions League | Women's Champions League | UWCL ; priority: 45
-comp:uefa-europa-league = UEFA Europa League | Europa League | UEL | Liga Europa | Ligue Europa ; priority: 85
-comp:uefa-conference-league = UEFA Conference League | Conference League | Europa Conference League | UECL ; priority: 70
+comp:uefa-europa-league = UEFA Europa League | Europa League | UEL | Liga Europa | Ligue Europa | Europa Liga | Liga Europy ; priority: 85
+comp:uefa-conference-league = UEFA Conference League | Conference League | Europa Conference League | UECL | Liga Konferencji | Liga Konferencji UEFA | Liga Konferencji Europy ; priority: 70
 comp:laliga = LaLiga | La Liga | LaLiga EA Sports | Spanish LaLiga | Primera Division ; priority: 90 ; not after: liga
 comp:laliga-hypermotion = LaLiga Hypermotion | LaLiga 2 | Segunda Division ; priority: 45
 comp:serie-a = Serie A | Serie A TIM | Serie A Enilive ; priority: 85 ; not after: brasileirao campeonato brasileiro basket volley lba
-comp:bundesliga = Bundesliga ; priority: 85 ; not after: handball basketball basket volleyball hockey eishockey 2 osterreichische austrian admiral frauen
+comp:bundesliga = Bundesliga ; priority: 85 ; not after: handball basketball basket volleyball hockey eishockey 2 3 osterreichische austrian admiral frauen
 comp:2-bundesliga = 2. Bundesliga | 2 Bundesliga | Zweite Bundesliga ; priority: 45
+comp:3-liga = 3. Liga | 3. Bundesliga | Dritte Liga ; priority: 25 ; not after: handball basketball basket volleyball hockey eishockey frauen
 comp:ligue-1 = Ligue 1 | French Ligue 1 | Ligue 1 McDonald's ; priority: 75
 comp:ligue-2 = Ligue 2 ; priority: 40
 comp:eredivisie = Eredivisie ; priority: 55
@@ -634,7 +635,7 @@ SHOW_WORDS = ("highlights | highlight | hl | hlts | hls | hoogtepunten | magazin
               "quiz | vlog | this week | tribute | history | archive | anthology | special | specials | nejlepsi momenty | "
               "greatest games | the story | movie | film | official film")
 REPLAY_WORDS = ("replay | rerun | re run | re air | reair | delayed | deferred | repeat | wiederholung | repeticion | "
-                "reprise | rediffusion | replica | en diferido | diferido | powtorka | ponovitev | encore")
+                "reprise | rediffusion | replica | en diferido | diferido | powtorka | ponovitev | encore | retro")
 LIVE_WORDS = "live | en vivo | en directo | ao vivo | en direct | direct | diretta | na zivo | uzivo | v zivo | live now"
 WOMEN_WORDS = {"women", "womens", "w", "ladies", "feminino", "femenino", "femminile", "frauen", "damer", "kvinner",
                "kvinnor", "feminine", "zene", "kobiet", "noi", "ž"}
@@ -1121,6 +1122,12 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
         lw = norm(label).split()
         if not comps and lw:
             comps = [ENTITIES[e] for _, _, e in scan(lw, weak=True) if ENTITIES[e].kind == "competition"]
+        if not comps:
+            # after the teams: "West Brom - Birmingham, Championship 2026/2027"
+            cut = title.rfind(right)
+            tail = norm(title[cut + len(right):]).split() if cut >= 0 else []
+            if tail:
+                comps = [ENTITIES[e] for _, _, e in scan(tail, weak=True) if ENTITIES[e].kind == "competition"]
         term = term or sport_word(lw)
         if term:
             comps = [c for c in comps if c.sport in (0, term)]

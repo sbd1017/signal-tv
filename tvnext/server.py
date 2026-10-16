@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     S.client = httpx.AsyncClient(follow_redirects=False, limits=httpx.Limits(max_connections=8))
     S.lib = sportsart.Library()
     S.acq = sportsart.Acquirer(S.lib, S.client)
-    S.fix = fixtures.Fixtures(S.lib, S.acq.src, config.STATE / "fixtures.json")
+    S.fix = fixtures.Fixtures(S.lib, S.acq.src, config.STATE / "fixtures.json", S.client)
     S.scores = scores.Scores(S.client)
     S.cast = cast.Cast(S.client)
     tasks = [asyncio.create_task(S.acq.run()), asyncio.create_task(S.fix.run()), asyncio.create_task(_housekeeping())]

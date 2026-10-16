@@ -640,6 +640,45 @@ class Fixtures(unittest.TestCase):
             self.assertIn("team:aston-villa|team:brentford|1792076400", again.ask([item])[0])
 
 
+    def test_espn_boards_and_the_meetings_competition(self):
+        """Thursday's Europa League game re-aired at midnight on Friday: a replay, and its competition
+        (the guide said neither)."""
+        played = int(datetime(2026, 10, 15, 16, 45, tzinfo=timezone.utc).timestamp())
+        airing = int(datetime(2026, 10, 16, 23, 0, tzinfo=timezone.utc).timestamp())
+        game = {"uid": "s:600~l:776~e:401915574", "date": "2026-10-15T16:45Z", "status": {"type": {"state": "post"}},
+                "competitions": [{"competitors": [
+                    {"score": "1", "team": {"displayName": "Union St.-Gilloise", "shortDisplayName": "Union SG"}},
+                    {"score": "2", "team": {"displayName": "Real Sociedad"}}]}]}
+
+        class Client:
+            urls = []
+
+            async def get(self, url, params=None, headers=None, timeout=None):
+                self.urls.append((url, params["dates"]))
+                return SimpleNamespace(status_code=200, json=lambda: {"events": [game] if params["dates"] == "20261015" else []})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lib = sportsart.Library(Path(tmp) / "art")
+            c = Client()
+            fx = fixtures.Fixtures(lib, None, Path(tmp) / "fixtures.json", c)
+            item = ("team:union-saint-gilloise", "team:real-sociedad", airing)
+            self.assertEqual(fx.ask([item]), ({}, 1))
+
+            async def work():
+                task = asyncio.create_task(fx.run())
+                while fx.q.qsize() or fx.queued:
+                    await asyncio.sleep(0.01)
+                task.cancel()
+            asyncio.run(work())
+            self.assertEqual(fx.ask([item])[0][f"team:union-saint-gilloise|team:real-sociedad|{airing}"],
+                             {"replay": True, "played": played, "comp": "comp:uefa-europa-league", "comp_name": "UEFA Europa League"})
+            self.assertEqual(len(c.urls), 16, "two weeks back to the day after, one board a day (US Eastern days)")
+            self.assertTrue(all(u.endswith("/soccer/all/scoreboard") for u, _ in c.urls))
+            # the same pair at another time that day: the boards already fetched serve it
+            asyncio.run(fx.lookup(*item[:2], airing + 3600))
+            self.assertEqual(len(c.urls), 16)
+
+
 class Scores(unittest.TestCase):
     """Live scores from an ESPN scoreboard, matched to our teams by name."""
     BOARD = {"events": [

@@ -820,12 +820,13 @@ async function loadArt(ids, labels = [], guests = []) {
 }
 
 // Live or replay, from the real fixture dates (the Pi's tvnext/fixtures.py): many channels re-air a
-// match days later with nothing in the guide to say so. "home|away|start" -> {live} | {replay, played};
+// match days later with nothing in the guide to say so. "home|away|start" -> {live} | {replay, played},
+// with the meeting's competition (comp, comp_name) when ESPN lists it - shown only where the guide names none;
 // asked for today's football, basketball and NFL with two known teams, answered from the Pi's cache, the rest looked up
 // in the background (another paint picks them up).
 const fixtureIdx = new Map();
 const fixtureAsked = new Map();
-const FX_SPORTS = new Set(['football', 'basketball', 'nfl']);           // what TheSportsDB has fixtures for
+const FX_SPORTS = new Set(['football', 'basketball', 'nfl']);           // what ESPN's scoreboards cover
 const fxKey = (ev) => (FX_SPORTS.has(ev.sport) && (ev.teams || []).length === 2 && ev.teams.every((t) => String(t).startsWith('team:'))
   ? `${ev.teams[0]}|${ev.teams[1]}|${ev.start}` : '');
 async function loadFixtures(evs) {
@@ -854,7 +855,8 @@ function withFixture(ev) {
   if (r) return { ...ev, replay: true, played: r.played };
   const v = fixtureIdx.get(fxKey(ev));
   if (!v) return ev;
-  return v.replay ? { ...ev, replay: true, played: v.played } : { ...ev, replay: false, played: 0 };
+  const comp = !ev.comp && v.comp ? { comp: v.comp_name, comp_id: v.comp } : {};
+  return v.replay ? { ...ev, ...comp, replay: true, played: v.played } : { ...ev, ...comp, replay: false, played: 0 };
 }
 // Live scores on the live cards (the Pi's tvnext/scores.py, from ESPN): per device, and never on replays.
 const SCORES_KEY = `${LSK}scores`;

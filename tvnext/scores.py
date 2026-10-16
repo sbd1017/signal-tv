@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -57,6 +58,23 @@ SCOREBOARDS = {
     "comp:nba": "basketball/nba", "comp:wnba": "basketball/wnba", "comp:nfl": "football/nfl",
 }
 SPORT_OF = {"soccer": sports.FOOTBALL, "basketball": sports.BASKETBALL, "football": sports.NFL}
+# ESPN's league ids (the "l:" in an event's uid) -> our competitions, for a game found on a board of many leagues
+LEAGUES = {
+    700: "comp:premier-league", 3914: "comp:efl-championship", 3915: "comp:efl-league-one", 3916: "comp:efl-league-two",
+    3918: "comp:fa-cup", 3920: "comp:efl-cup", 8097: "comp:womens-super-league", 735: "comp:scottish-premiership",
+    740: "comp:laliga", 3921: "comp:laliga-hypermotion", 3951: "comp:copa-del-rey", 730: "comp:serie-a",
+    3956: "comp:coppa-italia", 720: "comp:bundesliga", 3927: "comp:2-bundesliga", 3954: "comp:dfb-pokal",
+    710: "comp:ligue-1", 3926: "comp:ligue-2", 3952: "comp:coupe-de-france", 725: "comp:eredivisie",
+    715: "comp:primeira-liga", 3946: "comp:super-lig", 3901: "comp:jupiler-pro-league", 3960: "comp:eliteserien",
+    3945: "comp:allsvenskan", 21231: "comp:saudi-pro-league", 3906: "comp:a-league", 770: "comp:major-league-soccer",
+    760: "comp:liga-mx", 630: "comp:brasileirao", 775: "comp:uefa-champions-league", 776: "comp:uefa-europa-league",
+    20296: "comp:uefa-conference-league", 19483: "comp:uefa-womens-champions-league", 2395: "comp:uefa-nations-league",
+    781: "comp:uefa-euro", 606: "comp:fifa-world-cup", 5501: "comp:fifa-club-world-cup", 783: "comp:copa-libertadores",
+    5454: "comp:copa-sudamericana", 3902: "comp:afc-champions-league", 2391: "comp:caf-champions-league",
+    786: "comp:world-cup-qualifiers", 787: "comp:world-cup-qualifiers", 788: "comp:world-cup-qualifiers",
+    789: "comp:world-cup-qualifiers", 790: "comp:world-cup-qualifiers", 46: "comp:nba", 59: "comp:wnba", 28: "comp:nfl",
+}
+_LEAGUE = re.compile(r"~l:(\d+)~")
 
 
 def team_key(team: dict, sport: int) -> str:
@@ -74,7 +92,8 @@ def words(name: str) -> frozenset:
 
 
 def parse_board(data: dict, sport: int) -> list[dict]:
-    """A scoreboard -> [{"ids": {team id: score}, "names": [(name words, score)] x2, "clock", "state", "detail", "start"}]."""
+    """A scoreboard -> [{"ids": {team id: score}, "names": [(name words, score)] x2, "clock", "state", "detail", "start",
+    "comp": our competition id or ""}]."""
     out = []
     for ev in (data or {}).get("events") or []:
         try:
@@ -91,8 +110,10 @@ def parse_board(data: dict, sport: int) -> list[dict]:
             st = ev.get("status") or {}
             typ = st.get("type") or {}
             start = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).timestamp()
+            league = _LEAGUE.search(f"{ev.get('uid') or ''}~")
             out.append({"ids": ids if len(ids) == 2 else {}, "names": names, "clock": st.get("displayClock") or "",
-                        "state": typ.get("state") or "", "detail": typ.get("shortDetail") or typ.get("detail") or "", "start": int(start)})
+                        "state": typ.get("state") or "", "detail": typ.get("shortDetail") or typ.get("detail") or "", "start": int(start),
+                        "comp": LEAGUES.get(int(league.group(1)), "") if league else ""})
         except (KeyError, IndexError, ValueError, TypeError):
             continue
     return out

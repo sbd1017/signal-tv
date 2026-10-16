@@ -144,6 +144,23 @@ class Recognition(unittest.TestCase):
                           ("Lech Poznań", "team:lech-poznan"), ("Kyoto Sanga F.C.", "team:kyoto-sanga"), ("Ίντερ", "team:inter-milan")):
             self.assertEqual(sports.resolve_side(side)[1], key, side)
 
+    def test_competition_where_the_guide_puts_it(self):
+        def comp(title, desc=""):
+            info = sports.classify(title, desc, SPORT_CH)
+            return sports.ENTITIES[info.comp].key if info and info.comp >= 0 else None
+        # after the teams, and in other languages
+        self.assertEqual(comp("Nogomet (M): West Brom - Birmingham, Championship 2026/2027"), "comp:efl-championship")
+        self.assertEqual(comp("UNION SG - REAL SOCIEDAD", "EUROPA LIGA."), "comp:uefa-europa-league")
+        self.assertEqual(comp("Piłka nożna: Liga Konferencji UEFA - mecz finałowy: Crystal Palace FC - Rayo Vallecano"),
+                         "comp:uefa-conference-league")
+        # the third tier is not the Bundesliga
+        self.assertEqual(comp("Nogomet - 3. Bundesliga: Fortuna Koln - Stuttgart II"), "comp:3-liga")
+        self.assertEqual(comp("Bundesliga: Bayern v Dortmund"), "comp:bundesliga")
+        self.assertIsNone(comp("Rugby: Leinster v Munster, Champions Cup"))
+        # a classic re-shown
+        self.assertTrue(sports.classify("Retro EFL Cup 09", "Relive the 2009 League Cup final between Manchester United and Tottenham.",
+                                        SPORT_CH).replay)
+
     def test_variants_kept_apart(self):
         key = lambda t: sports.classify(t, "", SPORT_CH).key
         self.assertNotEqual(key("UEFA Youth League: Leipzig vs PSV"), key("RB Leipzig vs PSV"))

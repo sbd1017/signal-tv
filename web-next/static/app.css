@@ -567,7 +567,8 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .fixture.feature .crest.real, .fixture.major .crest.real { background: radial-gradient(circle, rgba(255, 255, 255, .16), transparent 68%); }
 .fx-comp.has-logo::before { display: none; }
 .comp-logo { width: 18px; height: 18px; object-fit: contain; flex: none; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6)); }
-.dep-meta .comp-logo { width: 15px; height: 15px; }
+/* the competition's mark sits in a slot as wide as the crests above it, so its name lines up under the teams' */
+.dep-meta .comp-logo { width: 32px; height: 22px; }
 .fx-mark { position: absolute; z-index: -1; right: -6%; top: 50%; width: min(58%, 380px); aspect-ratio: 1; object-fit: contain; transform: translateY(-50%);
   opacity: .06; filter: grayscale(.35) brightness(1.3); pointer-events: none; transition: opacity .5s var(--ease); }
 .fixture.feature:hover .fx-mark { opacity: .09; }
@@ -628,13 +629,13 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .dep-time b { font: 700 26px/1 var(--f-numc); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
 .dep-time .when { font-size: 11.5px; }
 .dep-main { display: grid; gap: 4px; min-width: 0; text-align: left; }
-.dep-title { display: flex; align-items: center; gap: 10px; min-width: 0; font: 800 19px/1.1 var(--f-cond); letter-spacing: .01em; }
+.dep-title { display: flex; align-items: center; gap: 12px; min-width: 0; font: 800 19px/1.1 var(--f-cond); letter-spacing: .01em; }
 .dep-title > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 2px; }
-.dep-title .crest { width: 24px; height: 24px; }
-.dep-title .crest::after { font-size: 8px; }
+.dep-title .crest { width: 32px; height: 32px; }
+.dep-title .crest::after { font-size: 10px; }
 .dep-title .vs { font: 600 11px var(--f-text); text-transform: none; color: var(--faint); flex: none; }
 .dep-title.is-fav::after { content: "★"; color: var(--star); font-size: 14px; }
-.dep-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); min-width: 0; }
+.dep-meta { display: flex; align-items: center; gap: 8px 12px; font-size: 13px; color: var(--muted); min-width: 0; }
 .dep-meta > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dep-end { display: flex; align-items: center; gap: 8px; }
 .dep-logos { display: flex; }
@@ -955,7 +956,10 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
   .feed, .prog-ch { height: 38px; }
   .dep { grid-template-columns: 62px minmax(0, 1fr); gap: 4px 12px; padding: 13px 4px 13px 12px; }
   .dep-time b { font-size: 22px; }
-  .dep-title { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 9px; font-size: 18px; }
+  .dep-title { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; font-size: 18px; }
+  .dep-title .crest { width: 28px; height: 28px; }
+  .dep-meta { gap: 6px 10px; }
+  .dep-meta .comp-logo { width: 28px; height: 20px; }
   .dep-title .vs { display: none; }
   .dep-title.is-fav::after { display: none; }
   .dep-end { grid-column: 2; }
