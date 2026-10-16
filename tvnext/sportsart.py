@@ -1413,7 +1413,7 @@ def missing(lib: Library, events: list[dict] | None = None, kind: str = "", stat
             name = g["name"]
             sport = g["id"].split(":", 1)[1].split("--")[0] if g["id"].startswith("guest:") else "football"
             gid = guest_id(sport, name)
-            twin = gid and guest_twin(lib, gid, sport, name)
+            twin = gid and (gid if gid in idx else guest_twin(lib, gid, sport, name))
             if twin:
                 lib.gaps.resolve(g["id"], f"same club as {twin}")
     lib.gaps.flush()
