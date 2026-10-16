@@ -1,10 +1,10 @@
 // One <video> element for everything. Live channels play docked in the Live view;
 // movies/episodes play in a full-window overlay. Channel switches only swap the
 // source - the page never reloads.
-import { api, BASE, clientId, ApiError, fmtTime, setIcon, toast } from './api.js?v=20261016190000';
-import * as store from './store.js?v=20261016190000';
-import * as tracks from './tracks.js?v=20261016190000';
-import * as caps from './caps.js?v=20261016190000';
+import { api, BASE, clientId, ApiError, fmtTime, setIcon, toast } from './api.js?v=20261016233000';
+import * as store from './store.js?v=20261016233000';
+import * as tracks from './tracks.js?v=20261016233000';
+import * as caps from './caps.js?v=20261016233000';
 
 const $ = (id) => document.getElementById(id);
 const UA = navigator.userAgent;
@@ -17,7 +17,7 @@ function loadHls() {
   if (HlsLib) return Promise.resolve(HlsLib);
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = '/tv/static/vendor/hls.min.js?v=20261016190000';
+    s.src = '/tv/static/vendor/hls.min.js?v=20261016233000';
     s.onload = () => (window.Hls ? resolve((HlsLib = window.Hls)) : reject(new Error('hls.js missing')));
     s.onerror = () => reject(new Error('Could not load the HLS player.'));
     document.head.append(s);
@@ -67,7 +67,7 @@ export class Player {
   get playing() { return !this.v.paused && !this.v.ended; }
 
   // ---------------------------------------------------------------- opening
-  async open(item, { resume = 0, user = true, pick = null } = {}) {
+  async open(item, { resume = 0, user = true, pick = null, via = '' } = {}) {
     const seq = ++this.seq;
     if (user) this.v.play().catch(() => {});      // unlock media playback inside the user gesture (iOS)
     const prevJob = this.res && this.res.job;
@@ -92,6 +92,7 @@ export class Player {
     if (prevJob) qs.set('prev', prevJob);
     if (resume > 0) qs.set('t', String(Math.floor(resume)));
     if (item.series) qs.set('series', item.series);
+    if (via) qs.set('via', via);                   // 'backup' | 'main': the viewer switched provider
     if (item.kind !== 'live') {
       const params = tracks.playParams(trackPrefs(), store.prefs.get(tracks.titleKey(item), ''), this.pick);
       for (const [k, val] of Object.entries(params)) qs.set(k, val);

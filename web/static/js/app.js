@@ -1,13 +1,13 @@
 // Signal TV - app shell, router and views. No framework; all provider text is
 // inserted with textContent (never innerHTML).
 import { api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
-  chunked, toast, fmtClock, fmtDuration, fmtTime, img } from './api.js?v=20261016190000';
-import * as caps from './caps.js?v=20261016190000';
-import * as store from './store.js?v=20261016190000';
-import { Player } from './player.js?v=20261016190000';
-import * as tracks from './tracks.js?v=20261016190000';
-import * as lang from './lang.js?v=20261016190000';
-import * as names from './names.js?v=20261016190000';
+  chunked, toast, fmtClock, fmtDuration, fmtTime, img } from './api.js?v=20261016233000';
+import * as caps from './caps.js?v=20261016233000';
+import * as store from './store.js?v=20261016233000';
+import { Player } from './player.js?v=20261016233000';
+import * as tracks from './tracks.js?v=20261016233000';
+import * as lang from './lang.js?v=20261016233000';
+import * as names from './names.js?v=20261016233000';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -23,8 +23,10 @@ const player = new Player({
   nextEpisode: (item) => nextEpisode(item),
   onStarted: (item) => {
     if (item.kind === 'live') { markActiveChannel(item.id); renderLiveInfo(item); }
+    playerCast(item);
   },
   onClosed: (item) => {
+    playerCast(null);
     if (item && item.kind === 'live') { main.classList.remove('live-playing'); maybeIdle(); }
     if (state.section === 'library' || state.section === 'continue') render(true);
     refreshProgressBadges();
@@ -582,11 +584,16 @@ async function renderLiveInfo(item) {
   if (!item) { box.replaceChildren(); return; }
   const nn = guideData[item.id];
   const now = Date.now() / 1000;
+  // a backup provider has this channel: switch to it (or back), e.g. when the main one stutters
+  const res = player.item && player.item.id === item.id ? player.res : null;
+  const swap = res && res.backup ? h('button', { class: 'btn ghost small', type: 'button',
+    text: res.via === 'backup' ? 'Use main provider' : `Use ${res.backup}`, title: 'Play this channel from your other provider' }) : null;
+  if (swap) swap.addEventListener('click', () => player.open(item, { via: res.via === 'backup' ? 'main' : 'backup' }));
   const top = h('div', { class: 'info-top' },
     thumb(item.img, item.name, 'logo sm'),
     h('div', { class: 'info-titles' }, h('strong', { text: `${item.num ? item.num + '  ' : ''}${item.name}` }),
       nn && nn.now ? h('span', { class: 'muted small', text: `${fmtClock(nn.now[0])} – ${fmtClock(nn.now[1])}` }) : null),
-    favButton(item.id, { name: item.name, img: item.img, kind: 'live', num: item.num }));
+    swap, favButton(item.id, { name: item.name, img: item.img, kind: 'live', num: item.num }));
   const rows = [top];
   if (nn && nn.now) {
     rows.push(h('div', { class: 'info-now' }, h('span', { class: 'eyebrow', text: 'Now' }), h('span', { text: nn.now[2] }),
@@ -616,7 +623,29 @@ async function renderLiveInfo(item) {
     });
     rows.push(guideBtn, sched);
   }
-  box.replaceChildren(...rows);
+  const also = h('section', { class: 'also-on', hidden: true });
+  box.dataset.for = item.id;
+  box.replaceChildren(...rows, also);
+  alsoShowing(item, also, box);
+}
+
+// Watching a match: the other channels showing it (the Sports view's grouping of the guide), so the
+// commentary - or the picture - can be changed without leaving Live. Hidden channels left out.
+async function alsoShowing(item, also, box) {
+  let d, live;
+  try { [d, live] = await Promise.all([sportsData('today'), catalogue('live')]); } catch { return; }
+  if (!also.isConnected || box.dataset.for !== item.id) return;          // another channel's info by now
+  const mine = (c) => c.id === item.id || (c.ids || []).includes(item.id);
+  const ev = (d.events || []).find((e) => e.when === 'live' && (e.channels || []).some(mine));
+  if (!ev) return;
+  const feeds = visibleFeeds(ev.channels.filter((c) => !mine(c)), live);
+  if (!feeds.length) return;
+  const SHOW = 6;
+  const row = h('div', { class: 'also-row' }, ...feeds.slice(0, SHOW).map(feedButton));
+  const more = feeds.length > SHOW ? h('button', { class: 'btn ghost small', type: 'button', text: `${feeds.length - SHOW} more` }) : null;
+  if (more) more.addEventListener('click', () => { row.append(...feeds.slice(SHOW).map(feedButton)); more.remove(); });
+  also.replaceChildren(h('span', { class: 'eyebrow', text: `Also showing ${ev.title}` }), row, ...(more ? [more] : []));
+  also.hidden = false;
 }
 
 // ------------------------------------------------------------------ SPORTS
@@ -1031,6 +1060,11 @@ function cardFor(kind, it) {
   const a = h('a', { class: 'card', href: `#/${kind}/${it.id}`, 'aria-label': it.name, dataset: { id: it.id, kind } });
   const poster = thumb(it.img, it.name, 'poster');
   if (kind === 'movies') setPosterBadges(poster, it.id);
+  // favourite straight from a grid or search: the star in the poster's corner (the tile itself opens the title)
+  const star = favButton(it.id, { name: it.name, img: it.img, kind: kind === 'movies' ? 'movie' : 'series' });
+  star.classList.add('card-fav');
+  star.addEventListener('click', (e) => e.preventDefault());
+  poster.append(star);
   a.append(poster, h('span', { class: 'card-title', text: it.name }), h('span', { class: 'card-sub', text: [it.year || '', it.rating ? `★ ${Number(it.rating).toFixed(1)}` : ''].filter(Boolean).join('  ·  ') }));
   return a;
 }
@@ -1192,6 +1226,66 @@ async function movieDetails(id) {
     d.cast ? h('p', { class: 'muted small', text: `Cast: ${d.cast}` }) : null,
     d.director ? h('p', { class: 'muted small', text: `Director: ${d.director}` }) : null);
   openSheet(content, d.name);
+  moreLikeThis('movies', d, content);
+}
+
+// More like this (the Pi's tvapp/similar.py): series by genre, the words their descriptions share and
+// era; films by their genre's categories and era. Same language, one version per title.
+async function moreLikeThis(kind, d, page) {
+  let r, list;
+  try { r = await api(`/similar/${d.id}`, { timeout: 20000 }); list = cached(kind) || await catalogue(kind); } catch { return; }
+  if (parseHash().id !== d.id || !page.isConnected) return;
+  const items = (r.ids || []).map((id) => list.byId.get(id)).filter(Boolean);
+  if (items.length < 3) return;
+  page.append(h('section', { class: 'like' }, h('h3', { class: 'like-title', text: 'More like this' }),
+    h('div', { class: 'like-row' }, items.map((it) => cardFor(kind, it)))));
+}
+
+// Cast in the player (the Pi's sidecar, from TMDB): who is in the film, or the episode's regulars then
+// its guest stars, shown with the controls. Per device (Settings); hidden when the sidecar isn't there.
+const CAST_KEY = 'tv.cast';
+const castOn = () => { try { return localStorage.getItem(CAST_KEY) !== 'hide'; } catch { return true; } };
+let castFor = '';
+async function playerCast(item) {
+  const box = $('p-cast');
+  const id = item && (item.kind === 'movie' || item.kind === 'episode') ? item.id : '';
+  castFor = id;
+  box.hidden = true;
+  box.replaceChildren();
+  if (!id || !castOn()) return;
+  let q;
+  try {
+    if (item.kind === 'movie') {
+      const d = await api(`/movie/${item.id}`);
+      const f = names.film(d.name || item.name);
+      q = { type: 'movie', tmdb: d.tmdb || 0, title: f.title, year: d.year || f.year || 0 };
+    } else {
+      const d = await getSeries(item.series);
+      const f = names.film(d.name || item.seriesName || '');
+      q = { type: 'tv', tmdb: d.tmdb || 0, title: f.title, year: d.year || f.year || 0, s: item.season || 0, e: item.episode || 0 };
+    }
+  } catch { return; }
+  let r;
+  try {
+    const res = await fetch(`/tv/next/api/cast?${new URLSearchParams(q)}`, { credentials: 'same-origin' });
+    r = res.ok ? await res.json() : null;
+  } catch { return; }
+  if (castFor !== id || !r || !r.cast || !r.cast.length) return;
+  const person = (p) => {
+    const face = h('span', { class: 'pc-face', 'aria-hidden': 'true', dataset: { i: p.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('') } });
+    if (p.photo) {
+      const im = h('img', { src: `/tv/next/cast-img/w185/${p.photo}`, alt: '', decoding: 'async', loading: 'lazy' });
+      im.addEventListener('error', () => im.remove(), { once: true });
+      face.append(im);
+    }
+    return h('li', { class: `pc-person ${p.guest ? 'guest' : ''}` }, face,
+      h('span', { class: 'pc-text' }, h('b', { text: p.name }), p.character ? h('span', { text: p.character }) : null,
+        p.guest ? h('em', { text: 'Guest' }) : null));
+  };
+  box.replaceChildren(h('div', { class: 'pc-head' }, h('span', { text: item.kind === 'episode' ? 'In this episode' : 'Cast' }),
+    h('span', { class: 'pc-src', title: r.credit || '', text: 'TMDB' })),
+  h('ul', { class: 'pc-list', role: 'list' }, r.cast.map(person)));
+  box.hidden = false;
 }
 
 async function getSeries(id) {
@@ -1300,6 +1394,7 @@ async function seriesDetails(id) {
     d.cast ? h('p', { class: 'muted small', text: `Cast: ${d.cast}` }) : null,
     d.seasons.length ? tabs : emptyBox('No episodes', 'The provider did not list any episodes for this series.'), epQ, eps);
   openSheet(content, d.name);
+  moreLikeThis('series', d, content);
   if (d.seasons.length) {
     const want = up ? up.s.n : store.prefs.get(`season.${id}`, d.seasons[0].n);
     showSeason(d.seasons.find((s) => s.n === want) || d.seasons[0]);
@@ -1444,11 +1539,13 @@ function viewSettings() {
   const langBox = h('section', { class: 'lib-section status-card', id: 'set-language' });
   const tracksBox = h('section', { class: 'lib-section status-card', id: 'lib-tracks' });
   const uiBox = h('section', { class: 'lib-section status-card', id: 'lib-interface', hidden: true });
+  const castBox = h('section', { class: 'lib-section status-card', id: 'lib-cast', hidden: true });
   const backupBox = h('section', { class: 'lib-section status-card', id: 'lib-backup' });
   const statusBox = h('section', { class: 'lib-section status-card', id: 'lib-status' });
-  view.replaceChildren(viewHead('Settings'), langBox, tracksBox, uiBox, backupBox, statusBox);
+  view.replaceChildren(viewHead('Settings'), langBox, tracksBox, castBox, uiBox, backupBox, statusBox);
   renderCatalogueLang(langBox);
   renderTrackPrefs(tracksBox);
+  renderCastPref(castBox);
   renderInterface(uiBox);
   renderBackup(backupBox);
   renderStatus(statusBox);
@@ -1517,6 +1614,22 @@ function setUi(v) {
   document.cookie = v ? `tv_ui=${v}; Max-Age=34560000${tail}` : `tv_ui=; Max-Age=0${tail}`;
   location.reload();
 }
+// Cast in the player: on/off for this device, once the Pi has it set up (a TMDB key, entered in the
+// new interface's Settings). Without the sidecar the section stays hidden.
+async function renderCastPref(box) {
+  let st = null;
+  try { st = await (await fetch('/tv/next/api/cast/status', { credentials: 'same-origin' })).json(); } catch { return; }
+  if (!st || !st.on || !box.isConnected) return;
+  const sel = selectEl('Cast in the player', [['show', 'Show'], ['hide', 'Hide']], castOn() ? 'show' : 'hide', (v) => {
+    try { localStorage.setItem(CAST_KEY, v); } catch { /* private mode */ }
+    toast('Saved on this device');
+  });
+  box.replaceChildren(h('h2', { class: 'section-title', text: 'Cast in the player' }),
+    h('label', { class: 'pref-row' }, h('span', { text: 'Show the cast' }), sel),
+    h('p', { class: 'muted small', text: 'Who is in the film or episode (with the episode’s guest stars) while the player’s controls are showing. Only this device changes.' }));
+  box.hidden = false;
+}
+
 function renderInterface(box) {
   const draw = () => {
     const ui = state.status && state.status.ui;
