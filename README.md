@@ -12,6 +12,20 @@ This is the main version, with the newer interface. It still includes the origin
 ("Classic"), and each device can choose between them in Settings. If you only want the simpler
 original, see [Signal TV Classic](https://github.com/sbd1017/signal-tv-classic).
 
+![Films: the featured title and the grid](docs/screenshots/films.png)
+
+<table>
+<tr><td width="50%"><img src="docs/screenshots/sports.png" alt="Sports: live matches with crests and every broadcaster"><br><b>Sports</b>: today's matches from the guide, one card each, every broadcaster inside</td>
+<td width="50%"><img src="docs/screenshots/live.png" alt="Live TV: player, now and next, channel list"><br><b>Live TV</b>: now and next, the channel's guide, and the list beside it</td></tr>
+<tr><td><img src="docs/screenshots/film-page.png" alt="A film's page with More like this"><br><b>A film's page</b>, with More like this</td>
+<td><img src="docs/screenshots/series.png" alt="A series with its episodes"><br><b>Series</b>: seasons and episodes, resume and next episode</td></tr>
+<tr><td><img src="docs/screenshots/search.png" alt="Search across the guide and the catalogue"><br><b>Search</b>: what's on now and later, channels, films and series</td>
+<td><img src="docs/screenshots/phone.png" alt="On an iPhone"><br><b>On a phone</b>, as a home-screen app</td></tr>
+</table>
+
+<sub>Shown with a demo provider: made-up channels, and free films (Blender's open movies and public-domain
+classics). Image credits: [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS.md).</sub>
+
 ## What it does
 
 - **Live TV** with now and next, progress bars and a full guide for each channel. Channel up and down,
