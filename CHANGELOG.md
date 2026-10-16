@@ -2,6 +2,10 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.5.0 - 2026-10-16
+
+- Cast in the player, from TMDB (optional): who's in the film or episode, with photos and characters
+
 ## v1.4.0 - 2026-10-16
 
 - Films and Series tiles (grids and search): a favourite star in the poster's corner
