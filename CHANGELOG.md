@@ -2,6 +2,24 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.8.0 - 2026-10-16
+
+- Sports artwork: guides' other spellings of listed clubs, show titles filtered, name variants share one crest
+- Artwork gaps: close one whose own spelling has a crest by now
+- Artwork: one short word ('Racing') never borrows another club's crest
+- Live: the other channels showing the match being watched, under the player (change commentary without leaving Live)
+- A backup provider for Live TV: the same channel from a second subscription when the main one won't play it
+- Sports: SV Elversberg, Energie Cottbus and Fortuna Sittard, with the Greek guides' names for them
+- Sports: Le Havre, Borac Banja Luka and Anorthosis Famagusta (with the guides' spellings, Greek ones too)
+- Sports artwork: Borac Banja Luka's and Anorthosis' countries
+- Sports: competitions the guide puts after the teams or names in Polish/Croatian, 3. Liga, Retro reruns as replays; ESPN for live/replay and the missing competition; bigger crests and competition marks on the board
+- Sports board: the competition's name lines up under the teams' with or without a mark; a fixture verdict from another competition is another game; long single-word names smaller on phones, not broken
+- Sports: Al Riyadh, the Saudi clubs' short names (Hilal, Nassr, Ittihad) and the Saudi league as Croatian and Portuguese guides write it
+- Sports: the page gets each match's importance score (Live now ranked by it; it was never sent, so the earliest kick-off was featured); 'snimak' recordings and Racing Santander
+- Sports: a city alone is the NFL/NBA side only against another of that league (college games were split per channel), countries and EuroLeague clubs as other languages write them, Paris Basketball, past-year and description-dated listings as replays, 'combate', a guide title repeated after its colon, long event titles kept to three lines
+- Sports: a listing with no length (01:00-01:00) is one airing with its twins on other channels, not a card each
+- README: the backup provider
+
 ## v1.7.0 - 2026-10-16
 
 - Add a crest or logo by hand: Settings › Artwork › Add crest (image or link), and iptv artwork add
