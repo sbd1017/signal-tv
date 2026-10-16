@@ -950,6 +950,7 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
   .fixture.major .fx-team { font-size: 24px; }
   .fixture.major .fx-peek { display: none; }
   .fx-team { font-size: 20px; gap: 10px; }
+  .fx-team > .fx-name.long-word { font-size: .8em; }
   .fx-teams { gap: 6px; }
   .crest { width: 28px; height: 28px; }
   .crest::after { font-size: 10px; }

@@ -854,7 +854,8 @@ function withFixture(ev) {
   const r = scoreReplays.get(`${ev.title}|${ev.start}`);
   if (r) return { ...ev, replay: true, played: r.played };
   const v = fixtureIdx.get(fxKey(ev));
-  if (!v) return ev;
+  // a meeting in another competition is another game ("Retro EFL Cup 09" is not last week's league match)
+  if (!v || (ev.comp_id && v.comp && v.comp !== ev.comp_id)) return ev;
   const comp = !ev.comp && v.comp ? { comp: v.comp_name, comp_id: v.comp } : {};
   return v.replay ? { ...ev, ...comp, replay: true, played: v.played } : { ...ev, ...comp, replay: false, played: 0 };
 }
@@ -1337,7 +1338,8 @@ async function viewSports() {
       sk ? h('span', { class: 'fx-clock', hidden: true }) : null,
       compLabel(ev, meta || SPORT_NAMES[ev.sport] || 'Sport', where), ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, star);
     const sides = teamSides(ev);
-    const name = (t) => { const s = capsSpan(t.label); s.classList.add('fx-name'); return s; };
+    // a long single word ("Wolverhampton") is set smaller on a phone rather than broken mid-word
+    const name = (t) => { const s = capsSpan(t.label); s.classList.add('fx-name'); if (String(t.label).split(/\s+/).some((w) => w.length >= 12)) s.classList.add('long-word'); return s; };
     const title = sides ? h('div', { class: 'fx-teams' }, ...sides.map((t) => h('div', { class: 'fx-team' }, crestEl(t.crest, t.art, size === 'feature', ev.sport, { label: t.label, context: where, comp: ev.comp, guest: t.guest }, t.flag), name(t),
       sk ? h('span', { class: 'fx-score', dataset: { team: sideToken(t) }, 'aria-hidden': 'true' }) : null)))
       : h('div', { class: 'fx-title' }, capsSpan(ev.title));
@@ -1396,7 +1398,7 @@ async function viewSports() {
     else title.append(capsSpan(ev.title));
     const mainBtn = h('button', { class: 'dep-main', type: 'button', 'aria-label': `${ev.title}, ${fmtClock(ev.start)}, on ${best.ch.name}` },
       title, h('span', { class: 'dep-meta' }, hasArt(ev.comp_id) ? h('img', { class: 'comp-logo', src: artUrl(ev.comp_id, 64), alt: '', decoding: 'async' })
-        : (artNone(ev.comp_id) && noteGap(ev.comp_id, ev.comp, 'sports:board'), null),
+        : (artNone(ev.comp_id) && noteGap(ev.comp_id, ev.comp, 'sports:board'), h('span', { class: 'comp-logo', 'aria-hidden': 'true' })),
         h('span', { text: meta }), ev.replay ? replayTag(ev) : null,
         ev.youth ? h('span', { class: 'sp-tag', text: 'Youth' }) : null, feedNote(ev, true)));
     mainBtn.addEventListener('click', () => playChannel(best.ch));
