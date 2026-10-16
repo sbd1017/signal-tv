@@ -37,7 +37,7 @@ FCACHE=${TV_FAMILY_CACHE:-/var/cache/signal-tv-family}
 OWNER_STATE=${TV_OWNER_STATE:-/var/lib/signal-tv}
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 RESERVED=" tv tv-test next new pwa static api m bets home media go convert pokemon admin login "
-OWNER_MAP='    "~^POST:/tv/api/(family/[a-z0-9-]+/(passphrase|signout|provider)|tmdb)$" 1;   # Signal TV: Settings > Family sites, TMDB key'
+OWNER_MAP='    "~^POST:/tv/api/(family/[a-z0-9-]+/(passphrase|signout|provider)|tmdb|backup)$" 1;   # Signal TV: Settings > Family sites, TMDB key, backup provider'
 
 add_map_line() {  # add_map_line LINE: into the site's method map, after the /tv state line (once)
   $SUDO python3 - "$SITEMAP" "$1" <<'PY'

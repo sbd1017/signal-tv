@@ -691,8 +691,13 @@ async function renderLiveInfo(item, fresh = true) {
       h('div', { class: 'now-meta' }, item.num ? h('span', { text: `CH ${item.num}` }) : null, ...p.tags.slice(0, 3).map((t) => h('span', { class: 'tag', text: t })),
         h('span', { text: 'No programme guide' })));
   }
+  // a backup provider has this channel: switch to it (or back), e.g. when the main one stutters
+  const res = player.item && player.item.id === item.id ? player.res : null;
+  const swap = res && res.backup ? h('button', { class: 'btn ghost small', type: 'button',
+    text: res.via === 'backup' ? 'Use main provider' : `Use ${res.backup}`, title: 'Play this channel from your other provider' }) : null;
+  if (swap) swap.addEventListener('click', () => player.open(item, { via: res.via === 'backup' ? 'main' : 'backup' }));
   const card = h('div', { class: 'now-card' }, thumb(item.img, p.title, 'logo lg'), text,
-    h('div', { class: 'now-actions' }, favButton(item.id, { name: item.name, img: item.img, kind: 'live', num: item.num })));
+    h('div', { class: 'now-actions' }, swap, favButton(item.id, { name: item.name, img: item.img, kind: 'live', num: item.num })));
   const keepTl = !fresh && infoFor === item.id && box.querySelector('.tl');
   const tl = keepTl || h('div', { class: 'tl' });
   const also = (!fresh && infoFor === item.id && box.querySelector('.also-on')) || h('section', { class: 'also-on', hidden: true });
@@ -2530,6 +2535,7 @@ function viewSettings() {
   const uiBox = h('section', { class: 'panel', id: 'lib-interface' });
   const layoutBox = h('section', { class: 'panel', id: 'lib-layout' });
   const castBox = h('section', { class: 'panel', id: 'lib-cast' });
+  const provBox = h('section', { class: 'panel', id: 'lib-providers', hidden: FAMILY });
   const timeBox = h('section', { class: 'panel', id: 'lib-time' });
   const famBox = h('section', { class: 'panel', id: 'lib-family', hidden: true });
   const sportsBox = h('section', { class: 'panel', id: 'lib-sports' });
@@ -2537,13 +2543,14 @@ function viewSettings() {
   const statusBox = h('section', { class: 'panel', id: 'lib-status' });
   const artBox = h('section', { class: 'panel', id: 'lib-artwork' });
   view.replaceChildren(head('Settings', 'Languages and sync are shared by all your devices'),
-    h('div', { class: 'settings' }, tracksBox, uiBox, layoutBox, castBox, timeBox, sportsBox, famBox, backupBox, statusBox),
+    h('div', { class: 'settings' }, tracksBox, uiBox, layoutBox, castBox, provBox, timeBox, sportsBox, famBox, backupBox, statusBox),
     h('div', { class: 'settings-group' }, h('h2', { class: 'section-title', text: 'Diagnostics' }),
       h('div', { class: 'settings' }, artBox)));
   renderTrackPrefs(tracksBox);
   renderInterface(uiBox);
   renderLayout(layoutBox);
   renderCast(castBox);
+  if (!FAMILY) renderProviders(provBox);
   renderTimes(timeBox);
   sportsBox.replaceChildren(h('h2', { text: 'Sports' }),
     h('label', { class: 'pref-row' }, h('span', { text: 'Live scores' }),
@@ -2621,6 +2628,30 @@ function renderFamily(box) {
   draw();
 }
 
+// Providers: the main one (set on the Pi) and a backup the player falls back to (tvapp/backups.py).
+async function renderProviders(box) {
+  const st = (await loadStatus()) || {};
+  const b = (st.backups || []).find((x) => x && typeof x === 'object');
+  const main = `Main: ${st.provider === 'xtream' ? 'Xtream account' : 'playlist'}${st.configured ? '' : ' (not set up)'} - changed on the Pi (iptv set-xtream).`;
+  const line = b ? `${b.label}: ${b.type === 'xtream' ? 'Xtream account' : 'playlist link'} · ${b.channels ? `${b.channels.toLocaleString()} channels ready` : 'loading its channels…'}${b.error ? ` · ${b.error}` : ''}`
+    : 'No backup yet.';
+  const form = providerForm({ name: 'Backup' }, () => renderProviders(box), (body) => postJSON('/backup', { ...body, label: 'Backup' }));
+  const add = h('button', { class: 'btn small', type: 'button', text: b ? 'Change backup' : 'Add a backup provider' });
+  add.addEventListener('click', () => { form.hidden = !form.hidden; });
+  const rm = b ? h('button', { class: 'btn small ghost', type: 'button', text: 'Remove backup' }) : null;
+  if (rm) {
+    rm.addEventListener('click', async () => {
+      if (!confirm('Remove the backup provider? Channels then play from the main one only.')) return;
+      try { await postJSON('/backup', { remove: true }); toast('Backup removed'); renderProviders(box); } catch (e) { toast(e.message); }
+    });
+  }
+  box.replaceChildren(h('h2', { text: 'Providers' }),
+    h('p', { class: 'muted small', text: main }),
+    h('p', { class: `small ${b && b.error ? 'warn' : ''}`, text: line }),
+    h('div', { class: 'family-actions' }, add, rm), form,
+    h('p', { class: 'muted small', text: 'A second subscription to fall back on: a channel that won\'t start on the main provider plays from the backup instead, and the Live page offers "Use Backup" to switch by hand (when the main one stutters). The catalogue stays the main provider\'s.' }));
+}
+
 // Cast in the player: on/off for this device; on the owner's own site, the TMDB key (kept on the Pi).
 async function renderCast(box) {
   let st = { on: false, credit: '' };
@@ -2681,7 +2712,7 @@ function renderLayout(box) {
 
 // A family site's provider: an Xtream account (server, username, password) or a playlist link. The site
 // checks them with the provider before keeping them; they are never shown again (tvapp/family.py).
-function providerForm(s, done) {
+function providerForm(s, done, post = (body) => postJSON(`/family/${s.name}/provider`, body)) {
   let kind = 'xtream';
   const field = (label, attrs) => {
     const inp = h('input', { class: 'input', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'data-lpignore': 'true', 'aria-label': label, ...attrs });
@@ -2705,10 +2736,10 @@ function providerForm(s, done) {
     msg.textContent = 'Checking with the provider…';
     const body = kind === 'xtream' ? { type: 'xtream', base: base.value, username: user.value, password: pass.value } : { type: 'm3u', url: link.value };
     try {
-      const d = await postJSON(`/family/${s.name}/provider`, body);
+      const d = await post(body);
       for (const i of [base, user, pass, link]) i.value = '';
       const exp = d.check && d.check.expires ? ` The account runs until ${fmtDate(d.check.expires, { day: 'numeric', month: 'short', year: 'numeric' })}.` : '';
-      toast(`${s.name}: provider accepted - loading channels`);
+      toast(`${s.name}: provider accepted`);
       msg.className = 'small';
       msg.textContent = `Accepted.${exp} Channels, films and series load in the next minute or two.`;
       setTimeout(done, 4000);

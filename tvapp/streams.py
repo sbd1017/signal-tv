@@ -242,7 +242,7 @@ class Engine:
                      audio: int | None = None, sub: int | None = None, live_mode=None) -> Job:
         transcode, container, decision = live_mode or (False, "ts", {})
         key = f"{kind}:{item['id']}" + (f":{int(offset)}:{int(hevc_ok)}:{audio}:{sub}" if kind == "vod"
-                                        else f":{container}:{int(transcode)}")
+                                        else f":{container}:{int(transcode)}") + (f":{item['via']}" if item.get("via") else "")
         async with self._start_lock:
             jid = self.by_key.get(key)
             job = self.jobs.get(jid) if jid else None

@@ -37,7 +37,7 @@ from . import config as cfg
 from .auth import CLIENT_RE, COOKIE, COOKIE_DAYS, Keys
 from .catalog import Catalogue, img_key
 from .lists import ListCache, encode_gz
-from . import alerts, epgsearch, family, hls, livemeta, memguard, refresh_guard, similar, sports, sportsalerts, tracks
+from . import alerts, backups, epgsearch, family, hls, livemeta, memguard, refresh_guard, similar, sports, sportsalerts, tracks
 from .health import ProviderHealth
 from .providers import ProviderError
 from .streams import Engine
@@ -89,6 +89,7 @@ class State:
     last_manual: float = 0.0
     started: float = 0.0
     tasks: set
+    backups: "backups.Backups | None" = None
     like: similar.Similar = similar.Similar()          # More like this (series index, per catalogue version)
     like_lock: asyncio.Lock = asyncio.Lock()
     like_cache: dict = {}
@@ -151,6 +152,8 @@ async def refresh_all(reason: str) -> None:
     await epg_index()
     async with S.like_lock:                               # More like this: ready before anyone asks
         await asyncio.to_thread(S.like.prepare, S.cat.data, S.cat.version)
+    if S.backups:
+        await S.backups.refresh(S.http)
 
 
 def epg_now_gz() -> bytes:
@@ -350,6 +353,8 @@ def reload_config() -> None:
     if who(old) != who(S.settings) and S.cat.cancel_refresh():
         log.info("provider changed: the refresh from the previous one was stopped")
     S.cat.configure(S.settings)
+    if S.backups is not None:
+        S.backups.reload(S.settings)
     S.engine.s = S.settings
     S.keys.reload()
     S.range_ok.clear()
@@ -365,6 +370,7 @@ async def lifespan(app: FastAPI):
                                limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
                                headers={"Accept-Encoding": "identity"})
     S.cat = Catalogue(S.settings, S.http)
+    S.backups = backups.Backups(S.settings)
     S.cat.configure(S.settings)
     S.cat.load()
     S.engine = Engine(S.settings)
@@ -681,6 +687,36 @@ async def tmdb_key(request: Request):
     return jresp(request, d)
 
 
+# ---- backup providers (tvapp/backups.py): the owner's Settings › Providers
+@app.post("/tv/api/backup")
+async def backup_set(request: Request):
+    if S.settings.auth != "nginx":
+        return Response(status_code=404)
+    if not write_allowed(request):
+        return err(request, 403, "Not allowed")
+    try:
+        body = await read_json(request)
+    except StateError as e:
+        return err(request, 400, str(e))
+    if isinstance(body, dict) and body.get("remove"):
+        await asyncio.to_thread(backups.save, S.settings.state_dir, [])
+        S.backups.reload(S.settings)
+        log.info("backup provider removed (by the owner)")
+        return jresp(request, {"ok": True, "backups": S.backups.summary()})
+    values, problem = family.parse_provider(body)
+    if not values:
+        return err(request, 400, problem)
+    problem, info = await family.check_provider(S.http, values, S.settings.user_agent)
+    if problem:
+        return err(request, 400, problem)
+    row = {**values, "label": (str(body.get("label") or "").strip()[:30] or "Backup")}
+    await asyncio.to_thread(backups.save, S.settings.state_dir, [row])
+    S.backups.reload(S.settings)
+    log.info("backup provider set (by the owner): %s", values["IPTV_PROVIDER_TYPE"])
+    background(S.backups.refresh(S.http))
+    return jresp(request, {"ok": True, "check": info, "backups": S.backups.summary()})
+
+
 # ---- a family site's provider, from the owner's Settings (forwarded by the owner's app on loopback only)
 @app.get("/tv/api/internal/provider")
 async def internal_provider(request: Request):
@@ -721,6 +757,7 @@ async def status(request: Request):
     st["limits"] = {"live": S.settings.max_live, "vod": S.settings.max_vod}
     st["ui"] = {"new": bool(new_ui()), "default": ui_default(), "this": ui_for(request), "classic": S.settings.classic}
     st["state"] = await asyncio.to_thread(S.state.summary)
+    st["backups"] = (S.backups.summary() if S.settings.auth == "nginx" or direct_local(request) else [len(S.backups.items)]) if S.backups is not None else []
     st["list_cache_kb"] = {k: v >> 10 for k, v in S.lists.sizes().items()}
     st["memory"] = {**{k: v for k, v in memory_usage().items() if k != "jobs"}, **S.guard.summary()}
     st["health"] = await asyncio.to_thread(health_report)
@@ -1348,11 +1385,24 @@ async def play_live(request: Request, item: dict, c: str, rechecked: bool = Fals
     decision = {**{k: d[k] for k in ("mode", "reason", "notice")}, "requested": item["id"], "requested_name": item["name"],
                 "requested_meta": metas.get(item["id"]), "meta": meta, "caps": caps_text, "quality": quality,
                 "probed": d.get("probed", 0), "sport": sport}
-    job = await S.engine.start_live(target, c, transcode, container, decision)
+    # a backup provider (tvapp/backups.py): asked for ("Switch provider"), preferred for a while after this
+    # channel failed on the main one, or tried when the main one won't start now
+    via = q.get("via", "")
+    bk = S.backups.find(target) if S.backups else None
+    on_backup = bool(bk) and (via == "backup" or (via != "main" and S.backups.prefer_backup(target["id"])))
     ready = LIVE_READY_SEGMENTS
     if (q.get("ready") or "").isdigit():
         ready = max(2, min(int(q["ready"]), 6))       # testing knob: segments before hand-over
+    job = await S.engine.start_live({**target, "url": bk[1], "via": "backup"} if on_backup else target, c, transcode, container, decision)
     job = await S.engine.wait_ready(job, ready)
+    if job.state == "failed" and bk and not on_backup and via != "main":
+        log.info("live %s: the main provider failed (%s); trying %s", target["id"], job.error, bk[0].label)
+        S.backups.main_failed(target["id"])
+        await S.engine.release(job.id, c)
+        await asyncio.sleep(LIVE_RECONNECT_GAP)
+        on_backup = True
+        job = await S.engine.wait_ready(await S.engine.start_live({**target, "url": bk[1], "via": "backup"}, c, transcode,
+                                                                  container, decision), ready)
     if job.state == "failed":
         stream_outcome(False, target["id"], job.error)
         return err(request, 502, job.error or "The channel could not be started.")
@@ -1371,7 +1421,8 @@ async def play_live(request: Request, item: dict, c: str, rechecked: bool = Fals
     return jresp(request, {"kind": "live", "mode": "hls", "job": job.id, "url": f"{S.settings.base}/m/{tok}/h/{job.id}/index.m3u8",
                            "transcode": job.transcode, "container": container, "quality": quality,
                            "variant": {"id": target["id"], "name": target["name"], "label": livemeta.label(meta) if meta else ""},
-                           "notice": d.get("notice", ""), "variants": menu, "meta": meta})
+                           "notice": (f"Playing from {bk[0].label}" if on_backup else d.get("notice", "")), "variants": menu, "meta": meta,
+                           "via": "backup" if on_backup else "main", "backup": bk[0].label if bk else ""})
 
 
 @app.get("/tv/api/play/{iid}")

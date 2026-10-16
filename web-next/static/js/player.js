@@ -67,7 +67,7 @@ export class Player {
   get playing() { return !this.v.paused && !this.v.ended; }
 
   // ---------------------------------------------------------------- opening
-  async open(item, { resume = 0, user = true, pick = null } = {}) {
+  async open(item, { resume = 0, user = true, pick = null, via = '' } = {}) {
     const seq = ++this.seq;
     if (user) this.v.play().catch(() => {});      // unlock media playback inside the user gesture (iOS)
     const prevJob = this.res && this.res.job;
@@ -92,6 +92,7 @@ export class Player {
     if (prevJob) qs.set('prev', prevJob);
     if (resume > 0) qs.set('t', String(Math.floor(resume)));
     if (item.series) qs.set('series', item.series);
+    if (via) qs.set('via', via);                   // 'backup' | 'main': the viewer switched provider
     if (item.kind !== 'live') {
       const params = tracks.playParams(trackPrefs(), store.prefs.get(tracks.titleKey(item), ''), this.pick);
       for (const [k, val] of Object.entries(params)) qs.set(k, val);
