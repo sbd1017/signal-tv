@@ -284,6 +284,17 @@ class Guests(unittest.TestCase):
             team("1", "Port FC", "Thailand"), team("2", "Port FC", "Ghana")]}})
         self.assertIsNone(meta)
 
+    def test_a_source_that_is_down_is_tried_again_tomorrow(self):
+        class Down(FakeSource):
+            async def api(self, path):
+                import httpx
+                raise httpx.HTTPStatusError("403", request=httpx.Request("GET", "http://x"), response=httpx.Response(403))
+        lib = sportsart.Library(Path(self.tmp.name) / "down")
+        gid = sportsart.guest_id("football", "Ruch Chorzow")
+        lib.add_guest(gid, "Ruch Chorzow", "football")
+        self.assertIsNone(asyncio.run(sportsart.acquire_guest(gid, lib, Down({}), None, None)))
+        self.assertTrue(lib.misses()[gid].get("error"), "not a 14-day miss")
+
     def test_college_side_from_espn(self):
         espn = FakeESPN({f"{sportsart.ESPN.BASE}/football/college-football/teams?limit=1000": {"sports": [{"leagues": [{"teams": [
             {"team": {"id": "290", "location": "Georgia Southern", "displayName": "Georgia Southern Eagles", "shortDisplayName": "Georgia Southern",

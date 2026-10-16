@@ -877,8 +877,86 @@ def guest_entity(lib: "Library", gid: str) -> dict | None:
             "names": [g["name"]], "weak": [], "priority": 0}
 
 
-async def find_guest(ent: dict, tsdb: TheSportsDB, espn: "ESPN | None") -> tuple[dict | None, str, list[str]]:
-    """The one record with exactly this name in this sport: a fighter's photo or a club's badge."""
+# ESPN's club lists searched for an unlisted football club (each list kept a day; a slug ESPN doesn't
+# have just comes back empty)
+ESPN_GUEST_FOOTBALL = tuple(f"soccer/{x}" for x in (
+    "eng.1 eng.2 eng.3 eng.4 eng.5 sco.1 sco.2 esp.1 esp.2 ita.1 ita.2 ger.1 ger.2 ger.3 fra.1 fra.2 ned.1 ned.2 por.1 por.2 bel.1 tur.1 "
+    "gre.1 aut.1 sui.1 den.1 nor.1 swe.1 pol.1 pol.2 cze.1 rou.1 bul.1 cro.1 srb.1 svn.1 rus.1 ukr.1 isr.1 cyp.1 irl.1 wal.1 "
+    "ksa.1 uae.1 qat.1 kuw.1 egy.1 mar.1 rsa.1 jpn.1 kor.1 chn.1 aus.1 ind.1 tha.1 mys.1 idn.1 usa.1 mex.1 bra.1 arg.1 col.1 chi.1 uru.1 "
+    "uefa.champions uefa.europa uefa.europa.conf afc.champions conmebol.libertadores").split())
+WD_TEAM_TYPE = {"football": WD_FOOTBALL_CLUB, "basketball": "Q13393265"}      # association football club, basketball team
+
+
+async def guest_wikidata(ent: dict, wd: "Wikidata") -> tuple[dict | None, str, list[str]]:
+    """An unlisted club by Wikidata: the one football (basketball) club item with exactly this name as its
+    label or alias, and its logo (P154) from Commons with the file's own licence."""
+    kind = WD_TEAM_TYPE.get(ent["sport"])
+    if not kind:
+        return None, "wikidata: not for this sport", []
+    name = ent["names"][0]
+    want = _keys([name])
+    ids = await wd.search(name)
+    if not ids:
+        return None, "wikidata: no item", [f"wikidata: {name}"]
+    items = await wd.items(ids)
+    clubs = [it for it in items.values() if kind in wd_ids(it, "P31") and want & _keys(wd_names(it))]
+    if len(clubs) != 1:
+        return None, f"wikidata: {'ambiguous, ' + str(len(clubs)) + ' clubs' if clubs else 'no club with that name'}", [f"wikidata: {name}"]
+    it = clubs[0]
+    logo = wd_logo(it)
+    if not logo:
+        return None, f"wikidata: {it['id']} has no logo", [f"wikidata: {name}"]
+    f = await wd.file(logo)
+    if not f or not f["url"]:
+        return None, "wikidata: logo file not found", [f"wikidata: {name}"]
+    licence = f"{f['licence'] or 'licence not stated'} (Wikimedia Commons: {f['page']}); {TRADEMARK}"
+    return _found(f["url"], "wikidata", it["id"], (wd_names(it) or [it["id"]])[0], f"https://www.wikidata.org/wiki/Special:EntityData/{it['id']}.json",
+                  "exact label/alias + club type", [f"wikidata: {name}"], licence, f["author"] or f["credit"] or "Wikimedia Commons",
+                  page=f["page"], file=logo), "", [f"wikidata: {name}"]
+
+
+async def find_guest(ent: dict, tsdb: TheSportsDB, espn: "ESPN | None", wd: "Wikidata | None" = None) -> tuple[dict | None, str, list[str]]:
+    """The one record with exactly this name in this sport: a fighter's photo or a club's badge.
+    A source that is down (TheSportsDB's free API, at times) is passed over for the next one."""
+    if ent["kind"] != "person":
+        try:
+            found, reason, tried = await find_guest_tsdb(ent, tsdb, espn)
+        except httpx.HTTPError as e:
+            found, reason, tried = None, f"thesportsdb unavailable ({type(e).__name__})", []
+        if found or reason.startswith("ambiguous"):
+            return found, reason, tried
+        if espn and ent["sport"] == "football":
+            want = _key(ent["names"][0])
+            hits: dict[str, tuple] = {}
+            for lp in ESPN_GUEST_FOOTBALL:
+                try:
+                    teams = await espn.teams(lp)
+                except httpx.HTTPError:
+                    continue
+                for t in teams:
+                    theirs = {_key(t.get(f) or "") for f in ("displayName", "shortDisplayName", "location", "name")}
+                    # the same name, or the guide's shorter one ("Cracovia" / "Cracovia Krakow"): all its words, one long
+                    if want in theirs or (any(len(w) >= 5 for w in want.split())
+                                          and any(set(want.split()) <= set(x.split()) for x in theirs if x)):
+                        hits.setdefault(t["id"], (t, lp))
+            tried.append("espn: club lists")
+            if len(hits) == 1:
+                t, lp = next(iter(hits.values()))
+                url = espn_logo(t.get("logos"))
+                if ESPN.IMAGE.match(url or ""):
+                    return _found(url, "espn", t["id"], t.get("displayName"), f"{ESPN.BASE}/{lp}/teams/{t['id']}",
+                                  f"exact name, listed in {lp}", tried, ESPN_LICENCE, "ESPN", path=f"{lp}/teams/{t['id']}"), "", tried
+            elif len(hits) > 1:
+                return None, f"ambiguous: {len(hits)} ESPN clubs", tried
+        down = "unavailable" in reason                    # then a miss is only for now: tried again tomorrow
+        if not wd:
+            return None, reason, tried
+        more, why, t2 = await guest_wikidata(ent, wd)
+        return more, ("" if more else (f"{reason}; {why}" if down else why)), tried + t2
+    return await find_guest_tsdb(ent, tsdb, espn)
+
+
+async def find_guest_tsdb(ent: dict, tsdb: TheSportsDB, espn: "ESPN | None") -> tuple[dict | None, str, list[str]]:
     name, sport = ent["names"][0], ent["sport"]
     want = _key(name)
     if ent["kind"] == "person":
@@ -929,21 +1007,21 @@ async def find_guest(ent: dict, tsdb: TheSportsDB, espn: "ESPN | None") -> tuple
     return None, reason, tried
 
 
-async def acquire_guest(gid: str, lib: "Library", tsdb: TheSportsDB, espn: "ESPN | None") -> dict | None:
+async def acquire_guest(gid: str, lib: "Library", tsdb: TheSportsDB, espn: "ESPN | None", wd: "Wikidata | None" = None) -> dict | None:
     ent = guest_entity(lib, gid)
     if not ent:
         return None
     try:
-        found, reason, tried = await find_guest(ent, tsdb, espn)
+        found, reason, tried = await find_guest(ent, tsdb, espn, wd)
     except Exception as e:                                    # source down: tomorrow
         lib.miss(gid, f"lookup failed: {e.__class__.__name__}", [], error=True)
         lib.log({"id": gid, "result": "error", "error": f"{e.__class__.__name__}: {e}"[:200]})
         return None
     if not found or not found.get("url"):
-        lib.miss(gid, reason or "matched, but the source has no image", tried)
+        lib.miss(gid, reason or "matched, but the source has no image", tried, error="unavailable" in (reason or ""))
         lib.log({"id": gid, "result": "miss", "reason": reason, "tried": tried})
         return None
-    src = tsdb if found["source"] == "thesportsdb" else espn
+    src = {"thesportsdb": tsdb, "espn": espn, "wikidata": wd}[found["source"]]
     try:
         data = await src.image(found["url"])
         typ = found["match"].pop("type", None)
@@ -1072,7 +1150,8 @@ class Acquirer:
         while True:
             eid = await self.q.get()
             try:
-                meta = (await acquire_guest(eid, self.lib, self.src, next((s for s in self.more if s.name == "espn"), None))
+                meta = (await acquire_guest(eid, self.lib, self.src, next((s for s in self.more if s.name == "espn"), None),
+                                            next((s for s in self.more if s.name == "wikidata"), None))
                         if eid.startswith("guest:") else await acquire(eid, self.lib, self.src, more=self.more))
                 self.done["cached" if meta else "miss"] += 1
             except Exception as e:                            # never let one entity stop the queue
