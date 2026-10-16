@@ -1,7 +1,7 @@
 // Signal TV "Signal" - app shell, router and views. No framework; all provider text is
 // inserted with textContent (never innerHTML). Shares the API, sync store and player logic
 // with the current interface (web/); only presentation and navigation differ.
-import { BASE, FAMILY, api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
+import { BASE, FAMILY, LSK, api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
   chunked, toast, fmtClock, fmtDuration, fmtTime, img, imgv, setImg, NEXT, STATIC, fmtDate, sameDay, tzOffset, timeMode, setTimeMode,
   piTimeZone, deviceTimeZone, setPiTimeZone } from './api.js?v=__V__';
 import * as caps from './caps.js?v=__V__';
@@ -162,8 +162,8 @@ function route() {
 
 // ---- this device's layout (Settings › Layout): whether the Sports tab shows, and the page the app opens
 // on. Per device, so a TV that never needs Sports can leave it out; every page stays the same.
-const LAYOUT_SPORTS = 'tv.next.showSports';
-const LAYOUT_START = 'tv.next.start';
+const LAYOUT_SPORTS = `${LSK}showSports`;
+const LAYOUT_START = `${LSK}start`;
 const START_PAGES = [['live', 'Live TV'], ['movies', 'Films'], ['series', 'Series'], ['library', 'Library'], ['sports', 'Sports']];
 const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
@@ -827,7 +827,7 @@ function withFixture(ev) {
   return v.replay ? { ...ev, replay: true, played: v.played } : { ...ev, replay: false, played: 0 };
 }
 // Live scores on the live cards (the Pi's tvnext/scores.py, from ESPN): per device, and never on replays.
-const SCORES_KEY = 'tv.next.scores';
+const SCORES_KEY = `${LSK}scores`;
 const scoresOn = () => { try { return localStorage.getItem(SCORES_KEY) !== 'hide'; } catch { return true; } };
 const playedOn = (ts) => fmtDate(ts, { weekday: 'short', day: 'numeric', month: 'short' });
 const replayTag = (ev) => h('span', { class: 'sp-tag replay', text: ev.played ? `Replay · played ${playedOn(ev.played)}` : 'Replay' });
@@ -1650,7 +1650,7 @@ async function viewGrid(kind) {
 // ---- the hero: hero.js picks; this resolves each slot to a title with a real backdrop. The resolved
 // set is kept per 6-hour window, so after the first visit in a window the hero draws at once -
 // before the 180k-title catalogue has even downloaded.
-const HERO_KEY = 'tv.next.hero.';
+const HERO_KEY = `${LSK}hero.`;
 const HERO_V = 3;                                // bump when the choice rules change: older picks are redone
 const heroLS = {
   get(kind) { try { return JSON.parse(localStorage.getItem(HERO_KEY + kind)) || {}; } catch { return {}; } },
@@ -2244,7 +2244,7 @@ async function viewSearch() {
 // An episode's card shows its series' poster: the provider's episode images are small video frames,
 // blurry and oddly cropped in a poster-shaped card. From the Series list when it's loaded, else this
 // device's memory of series posters, else the series' details (once; then remembered).
-const SERIES_POSTERS = 'tv.next.seriesPosters';
+const SERIES_POSTERS = `${LSK}seriesPosters`;
 function knownSeriesPoster(id) {
   const it = cached('series') && cached('series').byId.get(id);
   if (it && it.img) return it.img;
@@ -2761,7 +2761,7 @@ function renderInterface(box) {
 // Sports artwork: coverage and the crests / logos the Sports view has had to draw generated
 // (the Pi's gap registry; the full report is `iptv artwork missing` over SSH)
 function renderArtwork(box) {
-  const OPEN_KEY = 'tv.next.artOpen';                     // collapsed unless this device opened it
+  const OPEN_KEY = `${LSK}artOpen`;                     // collapsed unless this device opened it
   let open = false;
   try { open = localStorage.getItem(OPEN_KEY) === '1'; } catch { /* private mode */ }
   let pick = 'seen';

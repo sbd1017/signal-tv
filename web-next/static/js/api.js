@@ -3,6 +3,8 @@
 export const BASE = '/tv/api';
 // a family site's build (deploy/build_ui.py sets it): its own passphrase, no classic interface, no owner tools
 export const FAMILY = false;
+// this device's own settings (layout, times, the Films hero…), per site: family sites share /tv's domain
+export const LSK = BASE.split('/')[1] === 'tv' ? 'tv.next.' : `tv.${BASE.split('/')[1]}.next.`;
 export const STATIC = '/tv-test/static';      // this build's own assets; the API is shared with /tv
 // The sidecar (tvnext: resized artwork, sports crests, artwork gaps). deploy/build_ui.py rewrites it
 // for the /tv build, where nginx serves the sidecar under /tv/next/ behind /tv's own login.
@@ -218,8 +220,8 @@ export function fmtTime(sec) {
 // Every clock and date is shown in one zone: the Pi's (the guide's home, e.g. Europe/London, from
 // /status) unless this device chose its own in Settings. A browser that reports UTC for privacy (or
 // a VPN-matched zone) would otherwise put the whole guide an hour or more out.
-const TZ_KEY = 'tv.next.tz';                    // the Pi's zone, remembered so the first paint uses it
-const TZ_MODE = 'tv.next.timeMode';             // 'pi' (default) | 'device'
+const TZ_KEY = `${LSK}tz`;                    // the Pi's zone, remembered so the first paint uses it
+const TZ_MODE = `${LSK}timeMode`;             // 'pi' (default) | 'device'
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode: this page only */ } };
 let piZone = lsGet(TZ_KEY) || '';

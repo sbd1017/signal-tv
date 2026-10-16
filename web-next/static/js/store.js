@@ -11,8 +11,12 @@
 // data from another. Volume, mute and the last search stay on this device only.
 
 const BASE = '/tv/api';
-const LS = 'tv.v2.';
-const V1 = 'tv.v1.';                      // pre-sync, browser-only storage (migrated once, then left alone)
+// Each site keeps its own local copy. Family sites (/mumtv…) share the browser's storage with /tv on
+// the same domain: without this, a device that had used /tv would treat the family site's database
+// as a reset Pi and send it everything (resend() below). The build rewrites BASE per site.
+const SITE = BASE.split('/')[1];
+const LS = SITE === 'tv' ? 'tv.v2.' : `tv.${SITE}.v2.`;
+const V1 = SITE === 'tv' ? 'tv.v1.' : '';   // pre-sync, browser-only storage of /tv (migrated once, then left alone)
 const NS = ['fav', 'progress', 'recent', 'last', 'pref', 'hide', 'sfav'];
 const LOCAL_PREFS = new Set(['muted', 'volume', 'lastSearch']);
 const MAX_RECENT = 40;                    // shown
@@ -124,6 +128,7 @@ function seed(ns, key, value, at) {        // a legacy row: queued for the Pi as
 // has accepted everything (see sync()); until then it runs again on each load, adding
 // only rows this browser does not have yet.
 function migrateV1() {
+  if (!V1) return;
   const strip = (v) => { const { at, ...rest } = v || {}; return [rest, at]; };
   for (const [id, v] of Object.entries(ls.get(V1 + 'favs', {}) || {})) seed('fav', id, ...strip(v));
   for (const [id, v] of Object.entries(ls.get(V1 + 'progress', {}) || {})) seed('progress', id, ...strip(v));
@@ -258,7 +263,7 @@ export const recent = {
 
 export const prefs = {
   get(key, fallback) {
-    if (LOCAL_PREFS.has(key)) return ls.get(LS + 'local.' + key, ls.get(V1 + 'pref.' + key, fallback));
+    if (LOCAL_PREFS.has(key)) return ls.get(LS + 'local.' + key, V1 ? ls.get(V1 + 'pref.' + key, fallback) : fallback);
     const r = rows.pref[key];
     return r && !r.d ? r.v : fallback;
   },
