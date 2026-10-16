@@ -160,6 +160,24 @@ function route() {
   updateAmbient();
 }
 
+// ---- this device's layout (Settings › Layout): whether the Sports tab shows, and the page the app opens
+// on. Per device, so a TV that never needs Sports can leave it out; every page stays the same.
+const LAYOUT_SPORTS = 'tv.next.showSports';
+const LAYOUT_START = 'tv.next.start';
+const START_PAGES = [['live', 'Live TV'], ['movies', 'Films'], ['series', 'Series'], ['library', 'Library'], ['sports', 'Sports']];
+const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
+const sportsShown = () => lsGet(LAYOUT_SPORTS, '1') !== '0';
+const startPage = () => {
+  const v = lsGet(LAYOUT_START, 'live');
+  return START_PAGES.some(([k]) => k === v) && (v !== 'sports' || sportsShown()) ? v : 'live';
+};
+function applyLayout() {
+  for (const a of document.querySelectorAll('[data-nav="sports"]')) a.hidden = !sportsShown();
+  for (const a of document.querySelectorAll('a.mark')) a.setAttribute('href', `#/${startPage()}`);
+  requestAnimationFrame(moveTabIndicator);
+}
+
 function moveTabIndicator() {
   const ind = $('tab-ind');
   const a = $('tabs').querySelector('a[aria-current="page"]');
@@ -2416,6 +2434,7 @@ function viewLibrary() {
 function viewSettings() {
   const tracksBox = h('section', { class: 'panel', id: 'lib-tracks' });
   const uiBox = h('section', { class: 'panel', id: 'lib-interface' });
+  const layoutBox = h('section', { class: 'panel', id: 'lib-layout' });
   const timeBox = h('section', { class: 'panel', id: 'lib-time' });
   const famBox = h('section', { class: 'panel', id: 'lib-family', hidden: true });
   const sportsBox = h('section', { class: 'panel', id: 'lib-sports' });
@@ -2423,11 +2442,12 @@ function viewSettings() {
   const statusBox = h('section', { class: 'panel', id: 'lib-status' });
   const artBox = h('section', { class: 'panel', id: 'lib-artwork' });
   view.replaceChildren(head('Settings', 'Languages and sync are shared by all your devices'),
-    h('div', { class: 'settings' }, tracksBox, uiBox, timeBox, sportsBox, famBox, backupBox, statusBox),
+    h('div', { class: 'settings' }, tracksBox, uiBox, layoutBox, timeBox, sportsBox, famBox, backupBox, statusBox),
     h('div', { class: 'settings-group' }, h('h2', { class: 'section-title', text: 'Diagnostics' }),
       h('div', { class: 'settings' }, artBox)));
   renderTrackPrefs(tracksBox);
   renderInterface(uiBox);
+  renderLayout(layoutBox);
   renderTimes(timeBox);
   sportsBox.replaceChildren(h('h2', { text: 'Sports' }),
     h('label', { class: 'pref-row' }, h('span', { text: 'Live scores' }),
@@ -2495,6 +2515,24 @@ function renderFamily(box) {
       h('p', { class: 'muted small', text: 'A new passphrase signs everyone out of that site; tell them the new one. Your own sign-in here is separate.' }));
   };
   draw();
+}
+
+function renderLayout(box) {
+  const startSel = selectEl('Open on', START_PAGES.filter(([k]) => k !== 'sports' || sportsShown()), startPage(), (v) => {
+    lsSet(LAYOUT_START, v);
+    applyLayout();
+    toast('Saved on this device');
+  });
+  const sportsSel = selectEl('Sports tab', [['1', 'Show'], ['0', 'Hide']], sportsShown() ? '1' : '0', (v) => {
+    lsSet(LAYOUT_SPORTS, v);
+    applyLayout();
+    renderLayout(box);                                    // "Open on" loses or regains Sports
+    toast(v === '0' ? 'Sports tab hidden on this device' : 'Sports tab back on this device');
+  });
+  box.replaceChildren(h('h2', { text: 'Layout' }),
+    h('label', { class: 'pref-row' }, h('span', { text: 'Open on' }), startSel),
+    h('label', { class: 'pref-row' }, h('span', { text: 'Sports tab' }), sportsSel),
+    h('p', { class: 'muted small', text: 'Only this device changes: a TV or phone that never needs Sports can leave it out, and open straight to the page it’s used for. Search still finds sports channels and programmes.' }));
 }
 
 // Times: the Pi's zone (the guide's home) or this device's own. Per device: a laptop abroad can show
@@ -2863,7 +2901,8 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 store.startSync();
 window.addEventListener('hashchange', route);
-if (!location.hash) history.replaceState(null, '', '#/live');
+applyLayout();
+if (!location.hash) history.replaceState(null, '', `#/${startPage()}`);
 route();
 requestAnimationFrame(moveTabIndicator);
 fitLiveColumn();

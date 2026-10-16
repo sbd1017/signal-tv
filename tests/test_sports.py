@@ -304,6 +304,13 @@ class GreekSides(unittest.TestCase):
             self.assertEqual(sports.resolve_side(side, sports.NFL)[1], key, side)
 
 
+class SportFromDescription(unittest.TestCase):
+    def test_nicknames_once_the_description_names_the_sport(self):
+        full = sports.classify("NFL: Denver Broncos vs Seattle Seahawks", "", SPORT_CH)
+        nick = sports.classify("Seahawks vs Broncos", "NFL Football. Week 7 of the regular season.", SPORT_CH)
+        self.assertEqual((nick.sport, nick.key), (sports.NFL, full.key), "the same game: one card")
+
+
 class NotMatches(unittest.TestCase):
     def test_wrap_up_shows_and_f1_features(self):
         for title, ch, why in (("Boxing: Sunday of Pain - Podsumowanie", SPORT_CH, "Polish: summary"),

@@ -1141,6 +1141,14 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
         dw = norm(desc[:300]).split() if desc else []
     if not term and dw and (pair or comps or channel_sport):
         term = sport_word(dw)
+        # the sport only the description gives ("Seahawks vs Broncos", "NFL ..."): the names that count
+        # only in that sport (US teams' nicknames) are matched again with it
+        if term and pair and info.names and min(teams) < 0 and term in SCOPED:
+            a, ka, wa = resolve_side(info.names[0], term)
+            b, kb, wb = resolve_side(info.names[1], term)
+            if a >= 0 and b >= 0 and ka != kb:
+                teams = (a, b)
+                sides = sorted([ka, kb])
     if not comps and dw and (pair or term or channel_sport):
         comps = [ENTITIES[e] for _, _, e in scan(dw) if ENTITIES[e].kind == "competition"]
         info.comp_desc = bool(comps)
