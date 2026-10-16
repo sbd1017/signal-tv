@@ -387,6 +387,7 @@ async def lifespan(app: FastAPI):
     background(memory_watch())
     S.lists = make_lists()
     background(S.lists.warm(LIST_KINDS))           # the saved catalogue, while the startup refresh runs
+    background(warm_like())                        # More like this: the saved catalogue's series index
     background(scheduler())
     background(sports_alert_loop())
     asyncio.get_running_loop().add_signal_handler(signal.SIGHUP, reload_config)
@@ -908,6 +909,12 @@ async def movie(iid: str, request: Request):
         "img": img_key(it.get("img") or info.get("img2", "")), "backdrop": img_key(info.get("backdrop", "")),
         "cat": S.cat.data["cats"]["movie"].get(it.get("cat", ""), ""),
     })
+
+
+async def warm_like() -> None:
+    await asyncio.sleep(20)                           # after startup's own work
+    async with S.like_lock:
+        await asyncio.to_thread(S.like.prepare, S.cat.data, S.cat.version)
 
 
 @app.get("/tv/api/similar/{iid}")
