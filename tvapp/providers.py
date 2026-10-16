@@ -279,16 +279,38 @@ class XtreamProvider:
         u, p = quote(self.s.xtream_user, safe=""), quote(self.s.xtream_pass, safe="")
         return f"{self.base}/{kind}/{u}/{p}/{quote(str(sid), safe='')}.{ext}"
 
+    RETRY_STATUS = (404, 429, 500, 502, 503, 504)
+    RETRY_WAIT = 3
+
+    @staticmethod
+    def fresh_client() -> httpx.AsyncClient:
+        return httpx.AsyncClient(follow_redirects=True, headers={"Accept-Encoding": "identity"})
+
     async def _get_raw(self, http: httpx.AsyncClient, what: str, **params) -> bytes:
+        """One API call. Some panels sit behind several servers and one can answer 404 / 5xx for a while;
+        the shared client would keep reusing its connection to that one, so a retry goes out on a
+        connection of its own (twice at most, a few seconds apart)."""
         url, p = self._api(**params)
-        try:
-            r = await http.get(url, params=p, headers={"User-Agent": self.s.user_agent},
-                               timeout=httpx.Timeout(20, read=180))
-        except httpx.HTTPError as e:
-            raise ProviderError(f"xtream {what}: {type(e).__name__} ({redact(e)})") from None
-        if r.status_code != 200:
-            raise ProviderError(f"xtream {what}: provider answered HTTP {r.status_code}")
-        return r.content
+        timeout = httpx.Timeout(20, read=180)
+        for attempt in range(3):
+            try:
+                if attempt == 0:
+                    r = await http.get(url, params=p, headers={"User-Agent": self.s.user_agent}, timeout=timeout)
+                else:
+                    async with self.fresh_client() as fresh:
+                        r = await fresh.get(url, params=p, headers={"User-Agent": self.s.user_agent, "Connection": "close"},
+                                            timeout=timeout)
+            except httpx.HTTPError as e:
+                if attempt == 2:                         # a stalled download counts too: a fresh connection often isn't
+                    raise ProviderError(f"xtream {what}: {type(e).__name__} ({redact(e)})") from None
+                await asyncio.sleep(self.RETRY_WAIT * (attempt + 1))
+                continue
+            if r.status_code == 200:
+                return r.content
+            if r.status_code not in self.RETRY_STATUS or attempt == 2:
+                raise ProviderError(f"xtream {what}: provider answered HTTP {r.status_code}")
+            await asyncio.sleep(self.RETRY_WAIT * (attempt + 1))
+        raise ProviderError(f"xtream {what}: no answer")
 
     async def _get(self, http: httpx.AsyncClient, what: str, **params):
         """Small replies (login, categories, one title's info): parsed in place."""

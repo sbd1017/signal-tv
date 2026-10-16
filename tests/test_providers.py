@@ -40,8 +40,48 @@ async def fetch(data, status=200):
     def handler(request):
         reply = data[request.url.params.get("action")]
         return httpx.Response(status, content=reply if isinstance(reply, bytes) else json.dumps(reply).encode())
+    prov = XtreamProvider(SETTINGS)
+    prov.RETRY_WAIT = 0
+    prov.fresh_client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
-        return await XtreamProvider(SETTINGS).fetch(http)
+        return await prov.fetch(http)
+
+
+class Retries(unittest.TestCase):
+    """A panel whose server answers 404 for a while: a retry on a connection of its own, at most twice."""
+
+    def run_with(self, shared_codes, fresh_codes):
+        calls = {"shared": 0, "fresh": 0}
+        def make(kind, codes):
+            def handler(request):
+                calls[kind] += 1
+                code = codes[min(calls[kind], len(codes)) - 1]
+                return httpx.Response(code, content=json.dumps(provider_replies()[request.url.params.get("action")]).encode())
+            return handler
+        prov = XtreamProvider(SETTINGS)
+        prov.RETRY_WAIT = 0
+        prov.fresh_client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(make("fresh", fresh_codes)))
+        async def go():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(make("shared", shared_codes))) as http:
+                return await prov._get(http, "login")
+        return go, calls
+
+    def test_retry_on_a_fresh_connection(self):
+        go, calls = self.run_with([404], [200])
+        self.assertEqual(asyncio.run(go())["user_info"]["auth"], 1)
+        self.assertEqual(calls, {"shared": 1, "fresh": 1})
+
+    def test_gives_up_after_two_retries(self):
+        go, calls = self.run_with([404], [404, 404])
+        with self.assertRaisesRegex(ProviderError, "HTTP 404"):
+            asyncio.run(go())
+        self.assertEqual(calls, {"shared": 1, "fresh": 2})
+
+    def test_no_retry_for_a_refusal(self):
+        go, calls = self.run_with([400], [200])
+        with self.assertRaisesRegex(ProviderError, "HTTP 400"):
+            asyncio.run(go())
+        self.assertEqual(calls["fresh"], 0)
 
 
 class Fetch(unittest.TestCase):
