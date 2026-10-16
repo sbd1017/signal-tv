@@ -754,3 +754,7 @@ class ManualArtwork(unittest.TestCase):
         self.assertEqual(sportsart.guest_twin(self.lib, sportsart.guest_id("football", "Kitchee"), "football", "Kitchee"), gid)
         self.assertIsNone(sportsart.guest_twin(self.lib, sportsart.guest_id("basketball", "Kitchee"), "basketball", "Kitchee"), "own sport only")
         self.assertIsNone(sportsart.guest_twin(self.lib, sportsart.guest_id("football", "SC"), "football", "SC"))
+        rid = sportsart.guest_id("football", "Racing Club")
+        self.lib.add_guest(rid, "Racing Club", "football")
+        self.lib.store(rid, png(120, 120), {"name": "Racing Club", "source": "manual", "source_id": "o", "source_url": "", "match": {}})
+        self.assertIsNone(sportsart.guest_twin(self.lib, sportsart.guest_id("football", "Racing"), "football", "Racing"), "one short word: too many clubs")

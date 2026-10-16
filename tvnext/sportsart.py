@@ -876,7 +876,7 @@ def guest_twin(lib: "Library", gid: str, sport: str, name: str) -> str | None:
     if gid in idx:
         return None
     want = set(_key(name).split())
-    if not want or not any(len(w) >= 4 for w in want):
+    if not want or not (len(want) >= 2 or any(len(w) >= 7 for w in want)):     # "Racing" alone is too many clubs
         return None
     hits = [g for g, rec in lib.guests().items()
             if g in idx and rec.get("sport") == sport and want <= set(_key(rec.get("name", "")).split())]
