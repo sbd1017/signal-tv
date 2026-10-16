@@ -77,6 +77,36 @@ class Retries(unittest.TestCase):
             asyncio.run(go())
         self.assertEqual(calls, {"shared": 1, "fresh": 2})
 
+    def test_asks_for_compressed_json(self):
+        import gzip
+        seen = []
+        def handler(request):
+            seen.append(request.headers.get("accept-encoding"))
+            body = json.dumps(provider_replies()[None]).encode()
+            return httpx.Response(200, content=gzip.compress(body), headers={"Content-Encoding": "gzip"})
+        prov = XtreamProvider(SETTINGS)
+        async def go():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler), headers={"Accept-Encoding": "identity"}) as http:
+                return await prov._get(http, "login")
+        self.assertEqual(asyncio.run(go())["user_info"]["auth"], 1)
+        self.assertEqual(seen, ["gzip"])
+
+    def test_garbled_gzip_falls_back_to_plain(self):
+        calls = []
+        def handler(request):
+            calls.append(request.headers.get("accept-encoding"))
+            if request.headers.get("accept-encoding") == "gzip":
+                return httpx.Response(200, content=b"not gzip at all", headers={"Content-Encoding": "gzip"})
+            return httpx.Response(200, content=json.dumps(provider_replies()[None]).encode())
+        prov = XtreamProvider(SETTINGS)
+        prov.RETRY_WAIT = 0
+        prov.fresh_client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        async def go():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+                return await prov._get(http, "login")
+        self.assertEqual(asyncio.run(go())["user_info"]["auth"], 1)
+        self.assertEqual(calls, ["gzip", "identity"])
+
     def test_no_retry_for_a_refusal(self):
         go, calls = self.run_with([400], [200])
         with self.assertRaisesRegex(ProviderError, "HTTP 400"):

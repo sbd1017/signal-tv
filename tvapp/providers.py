@@ -292,15 +292,21 @@ class XtreamProvider:
         connection of its own (twice at most, a few seconds apart)."""
         url, p = self._api(**params)
         timeout = httpx.Timeout(20, read=180)
+        # the API's JSON compressed (lists of films shrink ~8x: slow panels answer in minutes, not hours);
+        # a panel that garbles it gets it plain on the retry
+        enc = "gzip"
         for attempt in range(3):
+            headers = {"User-Agent": self.s.user_agent, "Accept-Encoding": enc}
             try:
                 if attempt == 0:
-                    r = await http.get(url, params=p, headers={"User-Agent": self.s.user_agent}, timeout=timeout)
+                    r = await http.get(url, params=p, headers=headers, timeout=timeout)
                 else:
                     async with self.fresh_client() as fresh:
-                        r = await fresh.get(url, params=p, headers={"User-Agent": self.s.user_agent, "Connection": "close"},
-                                            timeout=timeout)
+                        r = await fresh.get(url, params=p, headers={**headers, "Connection": "close"}, timeout=timeout)
+                r.content                                # decoded here: a broken gzip body raises now
             except httpx.HTTPError as e:
+                if isinstance(e, httpx.DecodingError):
+                    enc = "identity"
                 if attempt == 2:                         # a stalled download counts too: a fresh connection often isn't
                     raise ProviderError(f"xtream {what}: {type(e).__name__} ({redact(e)})") from None
                 await asyncio.sleep(self.RETRY_WAIT * (attempt + 1))
