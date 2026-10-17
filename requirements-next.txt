@@ -1,3 +1,3 @@
-# The /tv-test sidecar (tvnext/, /opt/signal-tv-next/venv). Same pins as requirements.txt plus Pillow.
+# The tvnext sidecar (tvnext/, /opt/signal-tv-next/venv; serves /tv/next/ and, when staged, /tv-test). Same pins as requirements.txt plus Pillow.
 -r requirements.txt
 pillow==11.3.0

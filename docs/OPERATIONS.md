@@ -515,6 +515,10 @@ use **Restore (replace)** with the JSON.
 
 ## Redesign preview (/tv-test)
 
+**Removed 2026-10-17** (owner's request): the new interface has been live at `/tv` since 2026-10-15, so
+the preview pages and their nginx route are gone and `/tv-test` redirects to `/tv/`. The sidecar
+(`signal-tv-next.service`) stays: `/tv/next/` uses it. To stage a risky interface change again: `deploy/tv-test/install.sh` from a branch writes the pages; then put `deploy/tv-test/signal-tv-test.conf` back in `/etc/nginx/snippets/`, replace the `location ^~ /tv-test { return 302 /tv/; }` line in `sites-available/example.com.conf` with `include snippets/signal-tv-test.conf;`, re-add `"POST:/tv-test/api/art/gaps" 1;` to the method map in `conf.d/10-site.conf`, `nginx -t`, reload. The rest of this section describes the preview as it worked.
+
 `web-next/` is the "Signal" interface, previewed at https://example.com/tv-test (Basic Auth). It is
 only a new frontend: it calls the live app's `/tv/api` and `/tv/m` on the same origin, so it shows the
 real catalogue, guide, favourites and progress, and plays through the one `signal-tv.service`.
