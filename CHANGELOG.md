@@ -2,6 +2,11 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.10.0 - 2026-10-17
+
+- Docs: /tv-test preview removed 2026-10-17 (redirects to /tv); how to bring it back
+- Library: each row's heading opens it as its own page, everything in a grid (Films, Series, Channels, Continue watching, Recently played); the mini player's corner button is a close (X), always showing
+
 ## v1.9.0 - 2026-10-17
 
 - Classic: switch a channel to the backup provider (and back), the other channels showing the match being watched, a favourite star on film and series tiles, More like this under a title's details, the cast in the player (Settings: per device)
