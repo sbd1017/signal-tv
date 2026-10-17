@@ -485,6 +485,10 @@ body.mini .p-top { padding: 8px 8px 0; }
 body.mini .p-titles strong { font-size: 13px; }
 body.mini .p-titles span { font-size: 11.5px; }
 body.mini #p-expand { display: inline-grid; }
+/* in the mini player the corner button stops playback: an ✕, always showing (touch screens have no hover) */
+#p-close .ico-x, body.mini #p-close .ico-back { display: none; }
+body.mini #p-close .ico-x { display: block; }
+body.mini .p-top { opacity: 1; pointer-events: auto; transform: none; }
 body.mini .icon-btn { width: 34px; height: 34px; background: rgba(0, 0, 0, .35); }
 body.mini .p-osd { display: none; }
 body.mini .live-pill { height: 19px; font-size: 10px; }
@@ -846,6 +850,15 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .linkish:hover { color: var(--text); }
 /* Library channel cards (Recently played, Favourites): wide, over the channel's own logo */
 .rec-split { display: grid; gap: 22px; }
+/* Library: a row's heading opens it as its own page; there, the same cards as a grid */
+.row-open { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; border-radius: 8px; }
+.row-open .ico { opacity: .55; transition: transform .18s var(--ease), opacity .18s; }
+.row-open:hover .ico, .row-open:focus-visible .ico { opacity: 1; transform: translateX(3px); }
+.sub-head { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 6px; }
+.sub-head .sub-title { margin: 0; }
+.sub-head .n { font: 700 12px var(--f-num); color: var(--faint); }
+.lib-page .rec-split { gap: 34px; }
+.ch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .shelf.ch-row { grid-auto-columns: minmax(260px, 290px); }
 .ch-wide { position: relative; display: grid; align-content: space-between; gap: 10px; min-height: 140px; padding: 13px 16px 14px; border-radius: var(--r-lg); overflow: hidden; isolation: isolate; text-align: left; background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--line); transition: transform .3s var(--ease), box-shadow .2s; }
 .ch-wide:hover, .ch-wide:focus-visible { transform: translateY(-3px); box-shadow: inset 0 0 0 1px var(--line-2), 0 18px 34px -18px rgba(0, 0, 0, .9); }
@@ -1094,3 +1107,4 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .also-on[hidden] { display: none; }
 .also-title { font: 650 12px var(--f-text); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0; }
 .also-on > .btn { justify-self: start; }
+.lib-grid .state { grid-column: 1 / -1; }

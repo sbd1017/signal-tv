@@ -150,6 +150,10 @@ function route() {
     if (sec === 'live') document.body.classList.remove('mini');
     state.section = sec;
     state.pageArt = '';
+    state.libPage = sec === 'library' ? id || '' : '';
+    render();
+  } else if (sec === 'library' && (id || '') !== state.libPage) {
+    state.libPage = id || '';                 // a Library row opened as its own page, or back from one
     render();
   }
   for (const a of document.querySelectorAll('[data-nav]')) {
@@ -2451,11 +2455,23 @@ function openEntry(e, resume) {
   }
 }
 
+// The Library's rows scroll sideways; each one's heading opens it as its own page (#/library/<row>):
+// everything in it as a grid, like Films and Series, so a whole collection is seen at once.
+const LIB_PAGES = { continue: 'Continue watching', channels: 'Favourite channels', films: 'Favourite films', series: 'Favourite series', recent: 'Recently played' };
+
 function viewLibrary() {
   const which = state.section;
-  const shelf = () => h('div', { class: 'shelf' });
+  const page = which === 'library' && LIB_PAGES[parseHash().id] ? parseHash().id : '';
+  const shelf = () => h('div', { class: page ? 'grid lib-grid' : 'shelf' });
+  const chanRow = (list, open, recent) => (page ? h('div', { class: 'ch-grid' }, ...list.map((e) => channelCard(e, () => open(e), recent)))
+    : channelCards(list, open, recent));
+  // a row's heading: a link to its own page (when it has anything to show)
+  const opener = (key, title, n, tag = 'h2', cls = 'section-title') => (n
+    ? h(tag, { class: cls }, h('a', { class: 'row-open', href: `#/library/${key}`, 'aria-label': `${title}: see all ${n}` }, title, icon('chev', 'ico sm')))
+    : h(tag, { class: cls, text: title }));
   const sec = (id, title, n, content, extra) => h('section', { class: 'shelf-sec', id: `lib-${id}` },
-    h('div', { class: 'shelf-head' }, h('h2', { class: 'section-title', text: title }), h('span', { class: 'n', text: n ? String(n) : '' }), extra || null), content);
+    h('div', { class: 'shelf-head' }, ['continue', 'recent'].includes(id) ? opener(id, title, n) : h('h2', { class: 'section-title', text: title }),
+      h('span', { class: 'n', text: n ? String(n) : '' }), extra || null), content);
 
   // Continue watching: in-progress items + next-up for finished episodes
   const cont = shelf();
@@ -2480,13 +2496,15 @@ function viewLibrary() {
   // Favourites by kind
   const favWrap = h('div', {});
   let favN = 0;
-  for (const [k, label] of [['live', 'Channels'], ['movie', 'Films'], ['series', 'Series']]) {
+  const favRows = {};
+  for (const [k, label, key] of [['live', 'Channels', 'channels'], ['movie', 'Films', 'films'], ['series', 'Series', 'series']]) {
     const list = store.favs.list(k);
     if (!list.length) continue;
     favN += list.length;
-    favWrap.append(h('h3', { class: 'sub-title', text: label }),
-      k === 'live' ? channelCards(list, (e) => openEntry({ ...e, kind: k }))
-        : h('div', { class: 'shelf' }, list.map((e) => posterCard({ ...e, kind: k }, () => openEntry({ ...e, kind: k })))));
+    const row = k === 'live' ? chanRow(list, (e) => openEntry({ ...e, kind: k }))
+      : h('div', { class: page ? 'grid lib-grid' : 'shelf' }, list.map((e) => posterCard({ ...e, kind: k }, () => openEntry({ ...e, kind: k }))));
+    favRows[key] = [list.length, row];
+    favWrap.append(h('div', { class: 'sub-head' }, opener(key, label, list.length, 'h3', 'sub-title'), h('span', { class: 'n', text: String(list.length) })), row);
   }
   if (!favN) favWrap.append(emptyBox('No favourites yet', 'Use the star on any channel, film or series.'));
 
@@ -2510,8 +2528,8 @@ function viewLibrary() {
   const chans = rec.filter((e) => e.kind === 'live');
   const titles = rec.filter((e) => e.kind !== 'live');
   let recRow = h('div', { class: 'rec-split' },
-    chans.length ? channelCards(chans, (e) => openEntry(e), true) : null,
-    titles.length ? h('div', { class: 'shelf' }, ...titles.map(titleCard)) : null);
+    chans.length ? chanRow(chans, (e) => openEntry(e), true) : null,
+    titles.length ? h('div', { class: page ? 'grid lib-grid' : 'shelf' }, ...titles.map(titleCard)) : null);
   // channel cards show what's on (the guide's now/next list) and the channel's category and namesakes
   // (the channel list): both loaded here if Live hasn't been opened, then the page redraws once each
   if (chans.length || store.favs.list('live').length) {
@@ -2523,6 +2541,14 @@ function viewLibrary() {
   const clearBtn = rec.length ? h('button', { class: 'btn ghost small', type: 'button', text: 'Clear', onclick: () => { store.recent.clear(); render(true); } }) : null;
 
   const gear = h('a', { class: 'btn ghost small', href: '#/settings' }, icon('settings'), 'Settings');
+  if (page) {
+    const [n, content] = { continue: [inprog.length, cont], recent: [store.recent.list().length, recRow],
+      ...favRows }[page] || [0, emptyBox('Nothing here', 'This list is empty now.')];
+    const back = h('a', { class: 'btn ghost small', href: '#/library' }, icon('back'), 'Library');
+    view.replaceChildren(head(LIB_PAGES[page], `${n} ${n === 1 ? 'item' : 'items'}`, ...(page === 'recent' && clearBtn ? [clearBtn] : []), back),
+      h('section', { class: 'lib-page' }, content));
+    return;
+  }
   view.replaceChildren(head('Library', 'Synced across your devices', gear),
     sec('continue', 'Continue watching', inprog.length, cont),
     sec('favourites', 'Favourites', favN, favWrap),
