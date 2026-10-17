@@ -93,9 +93,27 @@ class State:
     like: similar.Similar = similar.Similar()          # More like this (series index, per catalogue version)
     like_lock: asyncio.Lock = asyncio.Lock()
     like_cache: dict = {}
+    not_live: dict = {}            # channel id -> when it was caught sending a recording instead of live TV
 
 
 S = State()
+NOT_LIVE_FOR = 6 * 3600            # such a channel is left out of Sports and "also showing" for this long
+
+
+def playable(ids) -> list:
+    """Channel ids worth offering for a programme: in the catalogue, and not lately caught sending a
+    recording in place of the live broadcast (Engine.on_not_live)."""
+    now = time.time()
+    return [i for i in ids if i in S.cat.by_id and now - S.not_live.get(i, 0) > NOT_LIVE_FOR]
+
+
+def caught_not_live(iid: str) -> None:
+    S.not_live[iid] = time.time()
+    if len(S.not_live) > 300:
+        for k in sorted(S.not_live, key=S.not_live.get)[:100]:
+            del S.not_live[k]
+    if S.backups:
+        S.backups.main_failed(iid)                  # the backup's copy of the channel is tried first next time
 try:
     _libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6")
     _libc.malloc_trim                               # glibc only (not macOS / musl)
@@ -243,7 +261,7 @@ async def sports_alert_loop() -> None:
 
 def event_broadcasters(ev: dict) -> int:
     """Channels showing an event, versions of one channel counted once (as the Sports cards)."""
-    return len(epgsearch.channel_groups([i for i in ev["ids"] if i in S.cat.by_id], variant_index(),
+    return len(epgsearch.channel_groups(playable(ev["ids"]), variant_index(),
                                         S.live_meta.get, livemeta.parse_caps("")))
 
 
@@ -390,6 +408,7 @@ async def lifespan(app: FastAPI):
     S.cat.on_event = refresh_event
     S.live_meta = livemeta.MetaCache(S.settings.state_dir / "live-meta.json")
     S.engine.on_meta = learned_meta
+    S.engine.on_not_live = caught_not_live
     background(memory_watch())
     S.lists = make_lists()
     background(S.lists.warm(LIST_KINDS))           # the saved catalogue, while the startup refresh runs
@@ -857,7 +876,7 @@ def search_guide(idx: epgsearch.Index, q: str, caps: dict) -> dict:
     events = []
     for ev in res["events"][:epgsearch.MAX_EVENTS]:
         ev = {k: ev[k] for k in ("when", "title", "sub", "fav_ids", "desc", "start", "stop", "strength")} | {"n": len(ev["ids"]), "ids": ev["ids"]}
-        groups = epgsearch.channel_groups([i for i in ev.pop("ids") if i in S.cat.by_id], vindex, S.live_meta.get, caps)
+        groups = epgsearch.channel_groups(playable(ev.pop("ids")), vindex, S.live_meta.get, caps)
         if groups:
             ev["channels"], ev["more"] = groups[:epgsearch.MAX_GROUPS], max(0, len(groups) - epgsearch.MAX_GROUPS)
             events.append(ev)
@@ -909,7 +928,7 @@ def sports_page(idx: epgsearch.Index, day: str, tzo: int, caps: dict, favourites
     vindex = variant_index()
     out, counts = [], {}
     for ev in events:
-        groups = epgsearch.channel_groups([i for i in ev["ids"] if i in S.cat.by_id], vindex, S.live_meta.get, caps)
+        groups = epgsearch.channel_groups(playable(ev["ids"]), vindex, S.live_meta.get, caps)
         if not groups:
             continue
         counts[ev["sport"]] = counts.get(ev["sport"], 0) + 1

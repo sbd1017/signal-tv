@@ -39,6 +39,25 @@ COPY_VIDEO_VOD = {"h264", "hevc"}
 DIRECT_AUDIO = {"aac", "mp3"}
 _VIDEO_LINE = re.compile(r"Stream #0:\d+.*?: Video: (\w+)")
 _AUDIO_LINE = re.compile(r"Stream #0:\d+.*?: Audio: (\w+)")
+# ffmpeg's last progress line: how much media it read and how fast ("time=00:10:00.06 ... speed= 117x")
+_STATS = re.compile(r"time=(\d+):(\d\d):(\d\d(?:\.\d+)?).*?speed=\s*([\d.]+)x")
+NOT_LIVE_MSG = ("This channel isn't sending live TV right now: the provider sends a short recording on repeat "
+                "instead. Try another channel showing this.")
+
+
+def recording(tail: list[str], speeds: list[float]) -> float:
+    """A live channel's ffmpeg ended by itself: was the source a recording? Live input arrives at real
+    time (~1x); a file is read as fast as the network allows (a 10-minute clip at 117x). Returns the
+    recording's length in seconds, or 0 when it looks like a live stream that dropped."""
+    for line in reversed(tail):
+        m = _STATS.search(line)
+        if m:
+            secs = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+            speed = float(m.group(4))
+            return secs if secs >= 30 and speed >= 4 else 0.0
+    if speeds and len(speeds) >= 2 and min(speeds[-2:]) >= 4:            # a transcode's -progress readings
+        return 60.0
+    return 0.0
 
 
 @dataclass
@@ -99,6 +118,7 @@ class Engine:
         self.probes: dict[str, dict] = {}
         self.recent: dict[str, dict] = {}  # item id -> how its last job ended (for diagnostics; last 50)
         self.on_meta = None                # callback(item_id, meta | None, **notes): formats learned from live jobs
+        self.on_not_live = None            # callback(item_id): a "live" channel turned out to send a recording
         self._start_lock = asyncio.Lock()
         self._reaper: asyncio.Task | None = None
         self._watchers: set[asyncio.Task] = set()
@@ -416,6 +436,14 @@ class Engine:
             return
         msg = self._friendly(job.tail)
         log.warning("job %s: ffmpeg exited %s: %s", job.id, rc, " | ".join(job.tail[-3:]))
+        clip = recording(job.tail, job.speeds) if job.kind == "live" and rc == 0 else 0
+        if clip:
+            # a recording passed off as the channel: restarting would only play the same minutes again
+            log.warning("job %s: %s sends a %d-second recording, not live TV - not restarting", job.id, job.item_id, clip)
+            if self.on_not_live:
+                self.on_not_live(job.item_id)
+            job.state, job.error = "failed", NOT_LIVE_MSG
+            return
         if job.kind == "live" and job.state == "ready" and job.restarts < 4 and job.viewers:
             job.restarts += 1
             job.seq = self._last_seq(job) + 1

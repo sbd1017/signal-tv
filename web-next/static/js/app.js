@@ -27,8 +27,10 @@ const STORE_KIND = { live: 'live', movies: 'movie', series: 'series' };     // v
 const TOUCH = matchMedia('(hover: none)').matches;
 
 // ------------------------------------------------------------------ player
-// Live: the stage is sized so the whole sticky column (picture, what's on, the guide strip) fits in the
-// window - the space under the picture is measured, not guessed (it differs with fonts and wrapping).
+// Live: the stage is sized so the picture, what's on and the guide strip fit in the window - the space
+// under the picture is measured, not guessed (it differs with fonts and wrapping). "Also showing" (the
+// other channels with the same match) comes after them and never shrinks the picture: it is scrolled to.
+// And whatever is under it, the picture keeps at least 60% of the window's height.
 function fitLiveColumn() {
   const col = document.getElementById('player');
   const stage = col && col.querySelector('.stage');
@@ -36,7 +38,11 @@ function fitLiveColumn() {
   let last = 0;
   new ResizeObserver(() => {
     if (!document.querySelector('.main.live-mode')) return;
-    const below = Math.ceil(col.offsetHeight - stage.offsetHeight) + 16;
+    const info = col.querySelector('.p-info');
+    const parts = info ? [...info.querySelectorAll(':scope > .now-card, :scope > .tl')] : [];
+    const bottom = parts.length ? Math.max(...parts.map((el) => el.getBoundingClientRect().bottom)) : col.getBoundingClientRect().bottom;
+    const measured = Math.ceil(bottom - stage.getBoundingClientRect().bottom) + 16;
+    const below = Math.min(measured, Math.round(window.innerHeight * 0.4));
     if (below > 40 && Math.abs(below - last) > 1) {
       last = below;
       document.documentElement.style.setProperty('--live-below', `${below}px`);
@@ -705,7 +711,7 @@ async function renderLiveInfo(item, fresh = true) {
   const keepTl = !fresh && infoFor === item.id && box.querySelector('.tl');
   const tl = keepTl || h('div', { class: 'tl' });
   const also = (!fresh && infoFor === item.id && box.querySelector('.also-on')) || h('section', { class: 'also-on', hidden: true });
-  box.replaceChildren(card, also, tl);
+  box.replaceChildren(card, tl, also);
   if (fresh || infoFor !== item.id) alsoShowing(item, also);
   if (keepTl || !nn) { if (!nn) tl.remove(); infoFor = item.id; return; }
   infoFor = item.id;

@@ -36,3 +36,19 @@ class Reaper(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NotLive(unittest.TestCase):
+    """A "live" channel that sends a short recording: ffmpeg reads it far faster than real time and
+    ends by itself. It is a recording, not a dropped live stream, so it is never restarted."""
+
+    def test_recording(self):
+        from tvapp.streams import recording
+        clip = ["frame=18000 fps=3509 q=-1.0 Lsize=N/A time=00:10:00.06 bitrate=N/A speed= 117x"]
+        self.assertAlmostEqual(recording(clip, []), 600.06, places=1)
+        dropped = ["frame=90000 fps=50 q=-1.0 Lsize=N/A time=00:30:00.00 bitrate=N/A speed=1.01x"]
+        self.assertEqual(recording(dropped, []), 0)                       # live at real time that dropped
+        burst = ["frame=200 fps=900 q=-1.0 Lsize=N/A time=00:00:08.00 bitrate=N/A speed=12x"]
+        self.assertEqual(recording(burst, []), 0)                         # a few buffered seconds: too short to tell
+        self.assertEqual(recording(["Connection reset by peer"], []), 0)
+        self.assertEqual(recording([], [6.0, 7.5]), 60.0)                  # a transcode's progress readings
