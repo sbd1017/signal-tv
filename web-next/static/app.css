@@ -918,7 +918,14 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
   .main.live-mode { display: block; }
   .main.live-mode .player { position: sticky; top: calc(var(--top) + var(--sat)); z-index: 6; margin: 0 calc(-1 * var(--gut)); background: var(--bg); }
   .main.live-mode .stage { border-radius: 0; width: 100%; max-height: none; box-shadow: none; }
-  .main.live-mode .p-info { padding: 14px var(--gut) 6px; gap: 12px; }
+  .main.live-mode .p-info { padding: 14px var(--gut) 6px; gap: 12px;
+    /* the player and this panel stay pinned at the top: never taller than the screen leaves (scrolls inside if so) */
+    max-height: calc(100svh - var(--top) - var(--sat) - 56.25vw - var(--dock, 0px) - var(--sab) - 16px); overflow-y: auto; overscroll-behavior: contain; }
+  .main.live-mode .also-on { margin-top: 4px; gap: 8px; }
+  .main.live-mode .also-on .fx-feeds { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--gut)); padding: 0 var(--gut) 4px; scroll-padding-inline: var(--gut); scroll-snap-type: x proximity; }
+  .main.live-mode .also-on .fx-feeds::-webkit-scrollbar { display: none; }
+  .main.live-mode .also-on .fx-feeds > * { flex: none; scroll-snap-align: start; }
+  .main.live-mode .also-title { font-size: 11px; }
   .now-title { font-size: 21px; }
   .now-card { grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; }
   .now-card .thumb.logo.lg { width: 48px; height: 48px; border-radius: 12px; }

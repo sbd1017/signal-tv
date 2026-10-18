@@ -735,7 +735,8 @@ async function alsoShowing(item, box) {
   if (!ev || !live) { box.hidden = true; return; }
   const feeds = visibleFeeds(ev.channels.filter((c) => !mine(c)), live, store.prefs.get('sportsFeeds', 'all'));
   if (!feeds.length) { box.hidden = true; return; }
-  const SHOW = 8;
+  // a narrow screen pins the player and this panel at the top: there, one sideways row with every channel
+  const SHOW = matchMedia('(max-width: 900px)').matches ? feeds.length : 8;
   const row = h('div', { class: 'fx-feeds' }, ...feeds.slice(0, SHOW).map(feedButton));
   const more = feeds.length > SHOW ? h('button', { class: 'btn ghost small', type: 'button', text: `${feeds.length - SHOW} more` }) : null;
   if (more) more.addEventListener('click', () => { row.append(...feeds.slice(SHOW).map(feedButton)); more.remove(); });
