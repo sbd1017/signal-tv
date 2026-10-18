@@ -2,6 +2,10 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.11.0 - 2026-10-18
+
+- Live: the picture keeps its size when a channel starts (Also showing comes after the guide strip and never shrinks it); a 'live' channel that sends a short recording on repeat is stopped with a plain message, not restarted, and left out of Sports and Also showing for 6 hours (its backup tried first)
+
 ## v1.10.0 - 2026-10-17
 
 - Docs: /tv-test preview removed 2026-10-17 (redirects to /tv); how to bring it back
