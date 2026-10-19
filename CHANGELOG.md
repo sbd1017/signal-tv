@@ -2,6 +2,11 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.12.0 - 2026-10-19
+
+- Live on phones: Also showing is one sideways row with every channel, so the pinned player and its panel never run off the screen (the panel scrolls inside if it ever would)
+- Site-wide sign-in: with SITE_AUTH=1 the app leaves sign-in to the site's central session (no device cookie); family sites keep their own passphrase under it (auth_request off), and their refused requests go to the site's handler only where nginx has one (family.sh switches the line on)
+
 ## v1.11.0 - 2026-10-18
 
 - Live: the picture keeps its size when a channel starts (Also showing comes after the guide strip and never shrinks it); a 'live' channel that sends a short recording on repeat is stopped with a plain message, not restarted, and left out of Sports and Also showing for 6 hours (its backup tried first)
