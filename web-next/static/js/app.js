@@ -27,10 +27,10 @@ const STORE_KIND = { live: 'live', movies: 'movie', series: 'series' };     // v
 const TOUCH = matchMedia('(hover: none)').matches;
 
 // ------------------------------------------------------------------ player
-// Live: the stage is sized so the picture, what's on and the guide strip fit in the window - the space
-// under the picture is measured, not guessed (it differs with fonts and wrapping). "Also showing" (the
-// other channels with the same match) comes after them and never shrinks the picture: it is scrolled to.
-// And whatever is under it, the picture keeps at least 60% of the window's height.
+// Live: the stage is sized so the picture, what's on, "Also showing" (one sideways row, so its height is
+// fixed however many channels have the match) and the guide strip fit in the window - the space under
+// the picture is measured, not guessed (it differs with fonts and wrapping). Whatever is under it, the
+// picture keeps at least 55% of the window's height.
 function fitLiveColumn() {
   const col = document.getElementById('player');
   const stage = col && col.querySelector('.stage');
@@ -39,10 +39,10 @@ function fitLiveColumn() {
   new ResizeObserver(() => {
     if (!document.querySelector('.main.live-mode')) return;
     const info = col.querySelector('.p-info');
-    const parts = info ? [...info.querySelectorAll(':scope > .now-card, :scope > .tl')] : [];
+    const parts = info ? [...info.querySelectorAll(':scope > .now-card, :scope > .tl, :scope > .also-on:not([hidden])')] : [];
     const bottom = parts.length ? Math.max(...parts.map((el) => el.getBoundingClientRect().bottom)) : col.getBoundingClientRect().bottom;
     const measured = Math.ceil(bottom - stage.getBoundingClientRect().bottom) + 16;
-    const below = Math.min(measured, Math.round(window.innerHeight * 0.4));
+    const below = Math.min(measured, Math.round(window.innerHeight * 0.45));
     if (below > 40 && Math.abs(below - last) > 1) {
       last = below;
       document.documentElement.style.setProperty('--live-below', `${below}px`);
@@ -711,7 +711,7 @@ async function renderLiveInfo(item, fresh = true) {
   const keepTl = !fresh && infoFor === item.id && box.querySelector('.tl');
   const tl = keepTl || h('div', { class: 'tl' });
   const also = (!fresh && infoFor === item.id && box.querySelector('.also-on')) || h('section', { class: 'also-on', hidden: true });
-  box.replaceChildren(card, tl, also);
+  box.replaceChildren(card, also, tl);
   if (fresh || infoFor !== item.id) alsoShowing(item, also);
   if (keepTl || !nn) { if (!nn) tl.remove(); infoFor = item.id; return; }
   infoFor = item.id;
@@ -735,12 +735,10 @@ async function alsoShowing(item, box) {
   if (!ev || !live) { box.hidden = true; return; }
   const feeds = visibleFeeds(ev.channels.filter((c) => !mine(c)), live, store.prefs.get('sportsFeeds', 'all'));
   if (!feeds.length) { box.hidden = true; return; }
-  // a narrow screen pins the player and this panel at the top: there, one sideways row with every channel
-  const SHOW = matchMedia('(max-width: 900px)').matches ? feeds.length : 8;
-  const row = h('div', { class: 'fx-feeds' }, ...feeds.slice(0, SHOW).map(feedButton));
-  const more = feeds.length > SHOW ? h('button', { class: 'btn ghost small', type: 'button', text: `${feeds.length - SHOW} more` }) : null;
-  if (more) more.addEventListener('click', () => { row.append(...feeds.slice(SHOW).map(feedButton)); more.remove(); });
-  box.replaceChildren(h('h3', { class: 'also-title', text: `Also showing ${ev.title}` }), row, ...(more ? [more] : []));
+  // the player and this panel stay in view (pinned) while the channels scroll: one sideways row with every
+  // channel, so it is always the same height and always reachable
+  const row = h('div', { class: 'fx-feeds also-row' }, ...feeds.map(feedButton));
+  box.replaceChildren(h('h3', { class: 'also-title', text: `Also showing ${ev.title} · ${feeds.length}` }), row);
   box.hidden = false;
 }
 

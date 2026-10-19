@@ -922,9 +922,7 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
     /* the player and this panel stay pinned at the top: never taller than the screen leaves (scrolls inside if so) */
     max-height: calc(100svh - var(--top) - var(--sat) - 56.25vw - var(--dock, 0px) - var(--sab) - 16px); overflow-y: auto; overscroll-behavior: contain; }
   .main.live-mode .also-on { margin-top: 4px; gap: 8px; }
-  .main.live-mode .also-on .fx-feeds { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--gut)); padding: 0 var(--gut) 4px; scroll-padding-inline: var(--gut); scroll-snap-type: x proximity; }
-  .main.live-mode .also-on .fx-feeds::-webkit-scrollbar { display: none; }
-  .main.live-mode .also-on .fx-feeds > * { flex: none; scroll-snap-align: start; }
+  .main.live-mode .also-row { margin: 0 calc(-1 * var(--gut)); padding: 0 var(--gut) 4px; scroll-padding-inline: var(--gut); }
   .main.live-mode .also-title { font-size: 11px; }
   .now-title { font-size: 21px; }
   .now-card { grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; }
@@ -1114,4 +1112,8 @@ body.mini .live-pill { height: 19px; font-size: 10px; }
 .also-on[hidden] { display: none; }
 .also-title { font: 650 12px var(--f-text); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0; }
 .also-on > .btn { justify-self: start; }
+/* Also showing: one sideways row at every size (the live column is pinned, so it must never grow tall) */
+.also-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; scroll-snap-type: x proximity; padding-bottom: 6px; }
+.also-row > * { flex: none; scroll-snap-align: start; }
+@media (hover: none) { .also-row { scrollbar-width: none; } .also-row::-webkit-scrollbar { display: none; } }
 .lib-grid .state { grid-column: 1 / -1; }
