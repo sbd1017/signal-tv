@@ -93,7 +93,10 @@ nginx_install() {  # nginx_install NAME PORT: the snippet, the owner's include a
     echo "$SNIPPETS/signal-tv.conf has changes that deploy/signal-tv.conf lacks - merge them first"; exit 1
   fi
   $SUDO install -m 0644 "$SRC/deploy/signal-tv.conf" "$SNIPPETS/signal-tv.conf"
-  sed -e "s/@NAME@/$name/g" -e "s/@PORT@/$port/g" "$SRC/deploy/signal-tv-family.conf" | $SUDO tee "$snip" >/dev/null
+  # lines for a site-wide sign-in: on only when nginx defines its handler for a refused family request
+  local siteauth='s/^\(\s*\)#@site-auth@ /\1#@site-auth@ /'
+  $SUDO grep -rqs 'location @family_unauthorized' "$(dirname "$SNIPPETS")" && siteauth='s/^\(\s*\)#@site-auth@ /\1/'
+  sed -e "s/@NAME@/$name/g" -e "s/@PORT@/$port/g" -e "$siteauth" "$SRC/deploy/signal-tv-family.conf" | $SUDO tee "$snip" >/dev/null
   $SUDO chmod 0644 "$snip"
   local line="    \"~^POST:/$name/(api/(state(/import)?|login|logout)|next/api/art/gaps)\$\" 1;   # Signal TV family site $name"
   $SUDO grep -qF "POST:/$name/" "$SITEMAP" || add_map_line "$line"

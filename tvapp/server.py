@@ -460,6 +460,10 @@ async def session_cookie(request: Request, call_next):
     response = await call_next(request)
     if path.startswith("/tv/m/") or path.startswith("/tv/pwa/"):
         return response
+    # Legacy device-cookie issuance stays available for rollback.
+    # The owner website uses only the central session when enabled.
+    if os.environ.get("SITE_AUTH") == "1":
+        return response
     # nginx sets this header (from $remote_user) only when Basic Auth succeeded.
     if request.headers.get("x-tv-auth-user"):
         ok, exp = S.keys.cookie_ok(request.cookies.get(COOKIE))
