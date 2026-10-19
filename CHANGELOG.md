@@ -2,6 +2,10 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.13.0 - 2026-10-19
+
+- Live: Also showing is back in view on desktop - one sideways row at every size, between what's on and the guide strip, counted when the picture is sized (a pinned column can't scroll to anything below the window)
+
 ## v1.12.0 - 2026-10-19
 
 - Live on phones: Also showing is one sideways row with every channel, so the pinned player and its panel never run off the screen (the panel scrolls inside if it ever would)
