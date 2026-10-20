@@ -12,6 +12,19 @@ This is the main version, with the newer interface. It still includes the origin
 ("Classic"), and each device can choose between them in Settings. If you only want the simpler
 original, see [Signal TV Classic](https://github.com/sbd1017/signal-tv-classic).
 
+## Live demo
+
+**[mubar.uk/signal](https://mubar.uk/signal/)**: open it and use it like your own, no sign-in needed.
+
+- It's connected to a made-up provider: invented channels with a full guide that follows the clock, and
+  free films and series (Blender's open movies and public-domain classics). No real TV channels.
+- Classic is in Settings, like on a real install, or on its own at
+  [mubar.uk/signal-classic](https://mubar.uk/signal-classic/).
+- The settings for your own provider and login are hidden.
+- It runs on a Raspberry Pi at home, so video is 720p and can be slow to start when a few people are
+  watching.
+- Everyone shares the same demo, and it goes back to the start every night at 04:00 UK time.
+
 ![Films: the featured title and the grid](docs/screenshots/films.png)
 
 <table>
