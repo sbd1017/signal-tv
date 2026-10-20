@@ -2,6 +2,10 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.15.0 - 2026-10-20
+
+- Tidy-up: unused definitions and dead CSS removed (old section-head / prog-ch / just-picked rules, filmMeta, SLOTS, QUALITY, SPORT_LABELS, phrase_ok, IMAGE_SUBS, SOURCE, TEXT_SUFFIXES); split CSS rules merged; storage settings through lsGet/lsSet; single-use helpers inlined; redundant guards on provider replies dropped. Classic: its warnings are amber again (a duplicate .warn rule had made them red)
+
 ## v1.14.0 - 2026-10-20
 
 - Faster and lighter: channels hand over at 10 s of picture or 5 segments, whichever first (6 s when converted) - 4K and converted channels start sooner; stereo AAC sound passed through instead of re-encoded; Live asks only for the channels whose programme changed since its copy of now/next (a few KB a minute, not ~180 KB); the newest films' and A-Z series' posters prepared daily for each site; three image resizes at once
