@@ -797,3 +797,16 @@ class ManualArtwork(unittest.TestCase):
         self.lib.add_guest(rid, "Racing Club", "football")
         self.lib.store(rid, png(120, 120), {"name": "Racing Club", "source": "manual", "source_id": "o", "source_url": "", "match": {}})
         self.assertIsNone(sportsart.guest_twin(self.lib, sportsart.guest_id("football", "Racing"), "football", "Racing"), "one short word: too many clubs")
+
+
+class PosterWarmUp(unittest.TestCase):
+    def test_newest_titles_posters(self):
+        import json
+        from tvnext import server as tvn
+        body = json.dumps({"v": 1, "items": [
+            ["m_1", "Old film", "c", "aaaaaaaaaaaaaaaaaaaa", 1990, 6.0, 100],
+            ["m_2", "New film", "c", "bbbbbbbbbbbbbbbbbbbb", 2026, 7.0, 300],
+            ["m_3", "No poster", "c", "", 2026, 7.0, 400],
+            ["m_4", "Middle film", "c", "cccccccccccccccccccc", 2010, 7.0, 200]]}).encode()
+        self.assertEqual(tvn.first_poster_keys(body, 2), ["bbbbbbbbbbbbbbbbbbbb", "cccccccccccccccccccc"])
+        self.assertEqual(tvn.first_poster_keys(body, 2, "name"), ["cccccccccccccccccccc", "bbbbbbbbbbbbbbbbbbbb"])

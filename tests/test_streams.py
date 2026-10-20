@@ -52,3 +52,46 @@ class NotLive(unittest.TestCase):
         self.assertEqual(recording(burst, []), 0)                         # a few buffered seconds: too short to tell
         self.assertEqual(recording(["Connection reset by peer"], []), 0)
         self.assertEqual(recording([], [6.0, 7.5]), 60.0)                  # a transcode's progress readings
+
+
+class StartAndSound(unittest.TestCase):
+    """Hand-over by seconds of picture as well as segments; stereo AAC sound passed through."""
+
+    def _engine(self, tmp):
+        from types import SimpleNamespace
+        from pathlib import Path
+        s = SimpleNamespace(live_dir=Path(tmp), vod_dir=Path(tmp), max_live=4, max_vod=2, user_agent="ua")
+        return Engine(s)
+
+    def test_ready_by_seconds(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            eng = self._engine(tmp)
+            job = Job(id="j", key="k", kind="live", item_id="l_1", dir=Path(tmp), url="u", ua="ua", ref="")
+            (Path(tmp) / "index.m3u8").write_text("#EXTM3U\n#EXTINF:6.0,\nseg_00000.ts\n#EXTINF:5.0,\nseg_00001.ts\n")
+            got = asyncio.run(eng.wait_ready(job, 5, 10.0))
+            self.assertEqual(got.state, "ready", "two long 4K segments: 11 s of picture, enough")
+            job2 = Job(id="j2", key="k2", kind="live", item_id="l_2", dir=Path(tmp), url="u", ua="ua", ref="")
+            (Path(tmp) / "index.m3u8").write_text("#EXTM3U\n#EXTINF:2.0,\nseg_00000.ts\n")
+            eng2 = self._engine(tmp)
+            import tvapp.streams as streams
+            old = streams.READY_TIMEOUT
+            streams.READY_TIMEOUT = 0.6
+            try:
+                self.assertEqual(asyncio.run(eng2.wait_ready(job2, 5, 10.0)).state, "failed", "2 s is not a cushion")
+            finally:
+                streams.READY_TIMEOUT = old
+
+    def test_sound_passed_through_when_already_stereo_aac(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            eng = self._engine(tmp)
+            job = Job(id="j", key="k", kind="live", item_id="l_1", dir=Path(tmp), url="http://x/live/1.ts", ua="ua", ref="")
+            job.audio_copy = True
+            cmd = eng._cmd(job)
+            self.assertEqual(cmd[cmd.index("-c:a") + 1], "copy")
+            job.audio_copy = False
+            cmd = eng._cmd(job)
+            self.assertEqual(cmd[cmd.index("-c:a") + 1], "aac")

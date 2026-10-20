@@ -140,13 +140,23 @@ export function search(list, query, limit = 60, keep = null) {
 }
 
 // ---------------------------------------------------------------- EPG cache
+// The whole list once (~180 KB for thousands of channels), then each minute only the channels whose
+// programme changed since (a few KB): merged into the same object. The whole list again every half hour.
 let guide = { t: 0, data: {} };
 let guideAt = 0;
+let guideFullAt = 0;
 export async function epgNow(force = false) {
   if (!force && Date.now() - guideAt < 60000) return guide.data;
   try {
-    const g = await api('/epg/now');
-    guide = { t: g.t, data: g.guide };
+    const delta = guide.t && Date.now() - guideFullAt < 30 * 60000;
+    const g = await api(delta ? `/epg/now?since=${guide.t}` : '/epg/now');
+    if (g.delta) {
+      for (const [id, nn] of Object.entries(g.guide || {})) { if (nn) guide.data[id] = nn; else delete guide.data[id]; }
+      guide.t = g.t;
+    } else {
+      guide = { t: g.t, data: g.guide };
+      guideFullAt = Date.now();
+    }
     guideAt = Date.now();
   } catch { /* keep the old one */ }
   return guide.data;

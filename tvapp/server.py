@@ -821,7 +821,25 @@ async def series_list(request: Request):
 
 @app.get("/tv/api/epg/now")
 async def epg_now(request: Request):
+    """Now/next for every channel with a guide - or, with ?since=<the t of the copy the page has>, only
+    the channels whose programme changed since then (a few KB a minute instead of the whole ~180 KB).
+    A copy older than the last guide reload, or than two hours, gets the whole list again."""
+    since = request.query_params.get("since") or ""
+    if since.isdigit() and S.cat.guide.updated <= int(since) and time.time() - int(since) < 7200:
+        return jresp(request, await asyncio.to_thread(epg_now_delta, int(since)))
     return await cached_list(request, "epg-now", cache="no-store", etag=False)
+
+
+def epg_now_delta(since: int) -> dict:
+    """The channels where a programme started or ended after `since`: their new now/next (None: no
+    guide entry on now or next any more, the page drops it)."""
+    now = time.time()
+    guide = S.cat.guide
+    out = {}
+    for iid, rows in list(guide.data.items()):
+        if any(since < r[0] <= now or since < r[1] <= now for r in rows):
+            out[iid] = guide.now_next(iid, now)
+    return {"t": int(now), "guide": out, "delta": 1}
 
 
 @app.get("/tv/api/epg/{iid}")
@@ -1273,6 +1291,11 @@ PROBE_BUDGET_S = 12             # ...and no more than this long in total before 
 LIVE_READY_SEGMENTS = 5         # segments before hand-over: the provider bursts ~20 s at connect, so 5 cost
                                 # nothing (measured: hand-over 2.1 s) and give the player a cushion for its
                                 # later 4-12 s delivery gaps (3 segments: 2 stalls in 90 s; 5: none in 120 s)
+# ...or this much picture, when it comes first: a converted channel has no connect burst (the Pi makes it at
+# ~1.3-1.7x real time, so 5 segments took 12 s), and a 4K channel's far-apart keyframes make long segments
+# (5 of them took 18 s). Measured start times: docs in the commit that set these.
+LIVE_READY_SECONDS = 10.0
+LIVE_READY_SECONDS_CONVERTED = 6.0
 LIVE_RECONNECT_GAP = 2.0        # s between closing a provider connection and opening the next (a 4xx seen at 1 s)
 
 
@@ -1417,8 +1440,9 @@ async def play_live(request: Request, item: dict, c: str, rechecked: bool = Fals
     ready = LIVE_READY_SEGMENTS
     if (q.get("ready") or "").isdigit():
         ready = max(2, min(int(q["ready"]), 6))       # testing knob: segments before hand-over
+    secs = 0.0 if (q.get("ready") or "").isdigit() else LIVE_READY_SECONDS_CONVERTED if transcode else LIVE_READY_SECONDS
     job = await S.engine.start_live({**target, "url": bk[1], "via": "backup"} if on_backup else target, c, transcode, container, decision)
-    job = await S.engine.wait_ready(job, ready)
+    job = await S.engine.wait_ready(job, ready, secs)
     if job.state == "failed" and bk and not on_backup and via != "main":
         log.info("live %s: the main provider failed (%s); trying %s", target["id"], job.error, bk[0].label)
         S.backups.main_failed(target["id"])
@@ -1426,7 +1450,7 @@ async def play_live(request: Request, item: dict, c: str, rechecked: bool = Fals
         await asyncio.sleep(LIVE_RECONNECT_GAP)
         on_backup = True
         job = await S.engine.wait_ready(await S.engine.start_live({**target, "url": bk[1], "via": "backup"}, c, transcode,
-                                                                  container, decision), ready)
+                                                                  container, decision), ready, secs)
     if job.state == "failed":
         stream_outcome(False, target["id"], job.error)
         return err(request, 502, job.error or "The channel could not be started.")

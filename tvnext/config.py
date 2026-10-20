@@ -16,7 +16,7 @@ def family_sites() -> dict[str, str]:
 
 SITES = family_sites()
 IMG_CACHE_MAX_MB = int(os.environ.get("TVN_IMG_CACHE_MAX_MB", "1500"))      # derivatives, pruned oldest-first
-RESIZE_WORKERS = int(os.environ.get("TVN_RESIZE_WORKERS", "2"))             # concurrent resizes (Pi: 4 cores)
+RESIZE_WORKERS = int(os.environ.get("TVN_RESIZE_WORKERS", "3"))             # concurrent resizes (Pi: 4 cores; a page of new posters at once)
 # cached: use the library, acquire missing artwork in the background (default)
 # refresh: as cached, and also re-check artwork older than ART_REFRESH_DAYS
 # remote: development only - every artwork request asks the source again; nothing is kept

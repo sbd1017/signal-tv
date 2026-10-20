@@ -121,7 +121,7 @@ class InterlacedTune(unittest.TestCase):
                 return SimpleNamespace(id=f"{len(self.started):012x}", dir=job_dir, state="ready", transcode=transcode,
                                        error="")
 
-            async def wait_ready(eng, job, n):
+            async def wait_ready(eng, job, n, secs=0.0):
                 return job
 
             async def analyze_file(eng, path):

@@ -45,7 +45,8 @@ async def lifespan(app: FastAPI):
     S.fix = fixtures.Fixtures(S.lib, S.acq.src, config.STATE / "fixtures.json", S.client)
     S.scores = scores.Scores(S.client)
     S.cast = cast.Cast(S.client)
-    tasks = [asyncio.create_task(S.acq.run()), asyncio.create_task(S.fix.run()), asyncio.create_task(_housekeeping())]
+    tasks = [asyncio.create_task(S.acq.run()), asyncio.create_task(S.fix.run()), asyncio.create_task(_housekeeping()),
+             asyncio.create_task(_warm_posters())]
     yield
     S.lib.gaps.flush()
     S.fix.flush()
@@ -64,6 +65,50 @@ def route(method: str, path: str):
             app.add_api_route(prefix + path, fn, methods=[method])
         return fn
     return add
+
+
+WARM_EVERY = 24 * 3600
+WARM_PER_KIND = 80
+
+
+def first_poster_keys(body: bytes, n: int, order: str = "added") -> list[str]:
+    """A site's film or series list (the live app's /tv/api/movies|series) -> the poster keys of the n
+    titles its page opens on: Films by newest ("added"), Series A-Z ("name")."""
+    items = (json.loads(body) or {}).get("items") or []
+    items = [it for it in items if isinstance(it, list) and len(it) > 6 and it[3]]
+    if order == "name":
+        items.sort(key=lambda it: str(it[1]).casefold())
+    else:
+        items.sort(key=lambda it: -(it[6] or 0))
+    return list(dict.fromkeys(it[3] for it in items[:n]))
+
+
+async def _warm_posters():
+    """Each site's newest films' and series' posters made in advance (both grid sizes), so the first rows
+    anyone opens are file reads, not provider fetches and resizes. Once a day, after a quiet start."""
+    await asyncio.sleep(180)
+    while True:
+        done = set()
+        for backend in dict.fromkeys([config.BACKEND, *config.SITES.values()]):
+            for kind in ("movies", "series"):
+                try:
+                    r = await S.client.get(f"{backend}/tv/api/{kind}", timeout=120)
+                    order = "added" if kind == "movies" else "name"         # what each page opens on (web-next viewGrid)
+                    keys = await asyncio.to_thread(first_poster_keys, r.content, WARM_PER_KIND, order) if r.status_code == 200 else []
+                except (httpx.HTTPError, ValueError) as e:
+                    log.info("poster warm-up: %s %s: %s", backend, kind, e.__class__.__name__)
+                    continue
+                for key in keys:
+                    for variant in ("poster", "poster-s"):
+                        if (variant, key) in done:
+                            continue
+                        done.add((variant, key))
+                        try:
+                            await images.get(variant, key, True, S.client, backend)
+                        except (images.Refused, httpx.HTTPError):
+                            pass
+        log.info("poster warm-up: %d posters ready", len(done))
+        await asyncio.sleep(WARM_EVERY)
 
 
 async def _housekeeping():

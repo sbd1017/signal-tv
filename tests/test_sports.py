@@ -423,3 +423,28 @@ class NotMatches(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuideNowDelta(unittest.TestCase):
+    """After the whole now/next list, a page asks only for what changed since its copy."""
+
+    def test_only_changed_channels(self):
+        from types import SimpleNamespace
+        old = getattr(server.S, "cat", None)
+        from tvapp.epg import Guide
+        g = Guide.__new__(Guide)
+        now = int(server.time.time())
+        g.data = {
+            "l_a": [[now - 3600, now - 60, "Old show", ""], [now - 60, now + 1800, "New show", ""]],   # changed a minute ago
+            "l_b": [[now - 1800, now + 1800, "Long film", ""]],                                      # unchanged
+        }
+        g.updated = now - 7200
+        server.S.cat = SimpleNamespace(guide=g)
+        try:
+            d = server.epg_now_delta(now - 300)
+            self.assertEqual(set(d["guide"]), {"l_a"})
+            self.assertEqual(d["guide"]["l_a"]["now"][2], "New show")
+            self.assertEqual(d["delta"], 1)
+        finally:
+            if old is not None:
+                server.S.cat = old

@@ -95,6 +95,7 @@ class Job:
     container: str = "ts"          # live: "ts" (H.264, as always) or "fmp4" (HEVC copy: Safari needs fMP4 for HEVC)
     decision: dict = field(default_factory=dict)    # live: what was chosen and why (diagnostics)
     speeds: list = field(default_factory=list)      # live transcode: recent ffmpeg speed readings
+    audio_copy: bool = False       # live: the channel's sound is already stereo AAC (what browsers play): passed through
 
     @property
     def playlist(self) -> str:
@@ -292,8 +293,11 @@ class Engine:
                 job.transcode = bool(job.vcodec) and (job.vcodec not in COPY_VIDEO_VOD or (job.vcodec == "hevc" and not hevc_ok))
             else:
                 job.transcode, job.container, job.decision = transcode, container, decision
-                job.vcodec = (decision.get("meta") or {}).get("v", "")
-                job.interlaced = bool((decision.get("meta") or {}).get("interlaced"))
+                meta = decision.get("meta") or {}
+                job.vcodec = meta.get("v", "")
+                job.interlaced = bool(meta.get("interlaced"))
+                # sound already stereo AAC (learned from earlier plays or a probe): copied, not re-encoded
+                job.audio_copy = meta.get("a") == "aac" and 0 < int(meta.get("ach") or 2) <= 2
             job.dir.mkdir(mode=0o700)
             job.touch(client)
             self.jobs[jid] = job
@@ -343,7 +347,10 @@ class Engine:
             cmd += ["-c:v", "copy"]
             if job.vcodec == "hevc":
                 cmd += ["-tag:v", "hvc1"]                           # what Safari / iOS require for HEVC
-        cmd += ["-c:a", "aac", "-b:a", "160k", "-ac", "2", "-ar", "48000"]
+        if job.kind == "live" and job.audio_copy:
+            cmd += ["-c:a", "copy"]                                 # stereo AAC already: nothing to do (and no re-encoding loss)
+        else:
+            cmd += ["-c:a", "aac", "-b:a", "160k", "-ac", "2", "-ar", "48000"]
         if job.kind == "live":
             flags = "delete_segments+independent_segments+temp_file+omit_endlist"
             if job.restarts:
@@ -424,6 +431,14 @@ class Engine:
                 m = _AUDIO_LINE.search(text)
                 if m and not job.acodec:
                     job.acodec = m.group(1)
+                    if job.kind == "live" and job.audio_copy and job.acodec != "aac":
+                        # the sound isn't AAC any more: browsers couldn't play it copied - start again, re-encoding
+                        log.warning("job %s: expected AAC sound, the channel now sends %s", job.id, job.acodec)
+                        if self.on_meta:
+                            self.on_meta(job.item_id, None, a=job.acodec)
+                        job.state, job.error = "failed", "This channel's format has changed - please try again."
+                        await self._kill(proc)
+                        return
             if "Opening '" in text or (text.startswith("  ") and seen_output):
                 continue
             job.tail = (job.tail + [redact(text)])[-15:]
@@ -549,13 +564,16 @@ class Engine:
     def produced(self, job: Job) -> float:
         return sum(float(x) for x in re.findall(r"#EXTINF:([\d.]+)", self._playlist(job)))
 
-    async def wait_ready(self, job: Job, need: int) -> Job:
+    async def wait_ready(self, job: Job, need: int, secs: float = 0.0) -> Job:
+        """Until the job has `need` segments, or (when given) `secs` seconds of media, whichever comes
+        first: a 4K channel whose keyframes are far apart writes long segments, and a converted channel
+        writes them only as fast as the Pi converts - both have their cushion sooner in seconds."""
         deadline = time.time() + READY_TIMEOUT
         while time.time() < deadline:
             if job.state == "failed":
                 return job
             have = self._segments(job) and (job.sub is None or (job.dir / "master.m3u8").is_file())
-            if have and (self._segments(job) >= need or job.state == "ready"):
+            if have and (self._segments(job) >= need or job.state == "ready" or (secs and self.produced(job) >= secs)):
                 if job.state == "starting":
                     job.state = "ready"
                 return job
