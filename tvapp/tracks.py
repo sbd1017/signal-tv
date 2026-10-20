@@ -24,7 +24,6 @@ from __future__ import annotations
 import re
 
 TEXT_SUBS = {"subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text", "tx3g"}
-IMAGE_SUBS = {"hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub", "dvb_teletext"}
 SUB_MODES = ("off", "auto", "on")
 SDH_MODES = ("prefer", "avoid", "either")
 

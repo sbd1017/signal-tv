@@ -1,19 +1,22 @@
 // Signal TV - app shell, router and views. No framework; all provider text is
 // inserted with textContent (never innerHTML).
 import { api, catalogue, cached, dropCatalogue, epgNow, fold, search, searchGuide, sortedItems, usedCats, h, icon, setIcon, thumb,
-  chunked, toast, fmtClock, fmtDuration, fmtTime, img } from './api.js?v=20261017001500';
-import * as caps from './caps.js?v=20261017001500';
-import * as store from './store.js?v=20261017001500';
-import { Player } from './player.js?v=20261017001500';
-import * as tracks from './tracks.js?v=20261017001500';
-import * as lang from './lang.js?v=20261017001500';
-import * as names from './names.js?v=20261017001500';
+  chunked, toast, fmtClock, fmtDuration, fmtTime, img } from './api.js?v=20261020130000';
+import * as caps from './caps.js?v=20261020130000';
+import * as store from './store.js?v=20261020130000';
+import { Player } from './player.js?v=20261020130000';
+import * as tracks from './tracks.js?v=20261020130000';
+import * as lang from './lang.js?v=20261020130000';
+import * as names from './names.js?v=20261020130000';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
 const main = $('main');
 const state = { section: '', cleanup: [], liveList: [], liveFilter: null, gridQuery: {}, seriesCache: new Map(), status: null, redraw: null };
 const STORE_KIND = { live: 'live', movies: 'movie', series: 'series' };     // view name -> kind used for hidden categories
+// this device's own settings (private browsing can refuse storage: then they just aren't remembered)
+const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 
 // ------------------------------------------------------------------ player
 const player = new Player({
@@ -1282,7 +1285,7 @@ async function moreLikeThis(kind, d, page) {
 // Cast in the player (the Pi's sidecar, from TMDB): who is in the film, or the episode's regulars then
 // its guest stars, shown with the controls. Per device (Settings); hidden when the sidecar isn't there.
 const CAST_KEY = 'tv.cast';
-const castOn = () => { try { return localStorage.getItem(CAST_KEY) !== 'hide'; } catch { return true; } };
+const castOn = () => lsGet(CAST_KEY, 'show') !== 'hide';
 let castFor = '';
 async function playerCast(item) {
   const box = $('p-cast');
@@ -1665,7 +1668,7 @@ async function renderCastPref(box) {
   try { st = await (await fetch('/tv/next/api/cast/status', { credentials: 'same-origin' })).json(); } catch { return; }
   if (!st || !st.on || !box.isConnected) return;
   const sel = selectEl('Cast in the player', [['show', 'Show'], ['hide', 'Hide']], castOn() ? 'show' : 'hide', (v) => {
-    try { localStorage.setItem(CAST_KEY, v); } catch { /* private mode */ }
+    lsSet(CAST_KEY, v);
     toast('Saved on this device');
   });
   box.replaceChildren(h('h2', { class: 'section-title', text: 'Cast in the player' }),
@@ -1679,8 +1682,6 @@ async function renderCastPref(box) {
 const LAYOUT_SPORTS = 'tv.layout.sports';
 const LAYOUT_START = 'tv.layout.start';
 const START_PAGES = [['live', 'Live TV'], ['sports', 'Sports'], ['movies', 'Movies'], ['series', 'Series'], ['search', 'Search'], ['continue', 'Continue Watching']];
-const lsGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 const sportsShown = () => lsGet(LAYOUT_SPORTS, '1') !== '0';
 const startPage = () => {
   const v = lsGet(LAYOUT_START, 'live');

@@ -11,7 +11,6 @@
 // Pure functions: the caller supplies the catalogue, progress, favourites and history.
 
 export const WINDOW_H = 6;
-export const SLOTS = ['new', 'top', 'continue', 'rediscover', 'new2'];
 
 export function windowOf(nowMs, tzOffsetMin = 0) {
   return Math.floor((nowMs / 60000 - tzOffsetMin) / (WINDOW_H * 60));

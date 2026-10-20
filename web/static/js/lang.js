@@ -11,7 +11,6 @@ const fold = (s) => String(s || '').normalize('NFKC').toUpperCase();
 // Region as tvapp/livemeta.py name_info() reads it: the name's own prefix ("UK:", "GR:"), except
 // packages and quality words, whose region is their category's ("UK| SPORT VIP", "DE| WOW SPORT").
 const PREFIX = /^\s*([A-Z0-9+]{2,6})\s*[:|]\s*/;
-const QUALITY = new Set(['4K', '8K', 'UHD', 'FHD', 'HD', 'SD', 'RAW', 'HDR']);
 // Two-letter codes this provider uses as countries, plus its own region words. Anything else in
 // front of a name ("SAT:", "DSTV:", "WOW:", "M+:", "SKYGO:") is a package, as VIP:/NOW: are.
 const COUNTRIES = new Set(('UK GB ENG IE US CA AU NZ ZA AFR DE AT CH FR BE NL LU ES PT IT GR CY TR PL CZ SK HU RO BG HR SI SR RS BH BA ' +

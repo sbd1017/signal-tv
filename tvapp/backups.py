@@ -112,7 +112,7 @@ class Backup:
     async def _xtream(self, http) -> list[tuple]:
         p = self.provider
         info = await p._get(http, "login")
-        ui = (info or {}).get("user_info") or {} if isinstance(info, dict) else {}
+        ui = (info.get("user_info") or {}) if isinstance(info, dict) else {}
         if str(ui.get("auth", "1")) == "0":
             raise providers.ProviderError("the backup provider refused the login")
         raw = await p._get_raw(http, "live streams", action="get_live_streams")

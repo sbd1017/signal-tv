@@ -57,7 +57,6 @@ from tvapp import sports
 from . import config
 
 SIZES = (64, 128, 256)
-SOURCE = "thesportsdb"
 LICENCE = ("TheSportsDB community artwork (www.thesportsdb.com), used for personal, non-commercial display; "
            "crests and logos are trademarks of their clubs and competitions.")
 ESPN_LICENCE = ("ESPN public site API (site.api.espn.com; unofficial, no key), used for personal, non-commercial display; "

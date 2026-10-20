@@ -338,7 +338,7 @@ class XtreamProvider:
         if not (self.base and self.s.xtream_user and self.s.xtream_pass):
             raise ProviderError("Xtream is selected but XTREAM_BASE_URL / USERNAME / PASSWORD are not all set")
         info = await self._get(http, "login")
-        ui = (info or {}).get("user_info") or {} if isinstance(info, dict) else {}
+        ui = (info.get("user_info") or {}) if isinstance(info, dict) else {}
         if str(ui.get("auth", "1")) == "0":
             raise ProviderError("xtream: the provider rejected the username/password")
         if ui.get("status") and str(ui.get("status")).lower() not in ("active", "trial"):
@@ -420,7 +420,7 @@ class XtreamProvider:
 
     async def movie_info(self, http, item) -> dict:
         data = await self._get(http, "movie info", action="get_vod_info", vod_id=item.get("native", ""))
-        info = (data or {}).get("info") or {} if isinstance(data, dict) else {}
+        info = (data.get("info") or {}) if isinstance(data, dict) else {}
         if not isinstance(info, dict):
             return {}
         bd = info.get("backdrop_path")

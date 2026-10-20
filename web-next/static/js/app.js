@@ -296,13 +296,6 @@ function chName(raw, { tags = 2, prefix = true } = {}) {
 }
 const plain = (raw) => names.parse(raw).title;
 const ftitle = (raw) => names.film(raw).title;
-// Language/package prefix as a small tag (EN, 4K-FR-HDR...), year in mono: under posters and titles.
-function filmMeta(raw, year, rating) {
-  const f = names.film(raw);
-  const y = year || f.year;
-  return [f.prefix ? h('span', { class: `tag ${f.uhd ? 'hot' : ''}`, text: f.prefix }) : null, y ? h('span', { text: String(y) }) : null,
-    rating ? h('span', { text: `★ ${Number(rating).toFixed(1)}` }) : null].filter(Boolean);
-}
 
 // One channel showing a programme: logo, name and the quality this device gets (search results,
 // Sports). c: {id, label, est, ok, ch} (tvapp/epgsearch.py channel_groups).
@@ -870,9 +863,9 @@ function withFixture(ev) {
 }
 // Live scores on the live cards (the Pi's tvnext/scores.py, from ESPN): per device, and never on replays.
 const SCORES_KEY = `${LSK}scores`;
-const scoresOn = () => { try { return localStorage.getItem(SCORES_KEY) !== 'hide'; } catch { return true; } };
-const playedOn = (ts) => fmtDate(ts, { weekday: 'short', day: 'numeric', month: 'short' });
-const replayTag = (ev) => h('span', { class: 'sp-tag replay', text: ev.played ? `Replay · played ${playedOn(ev.played)}` : 'Replay' });
+const scoresOn = () => lsGet(SCORES_KEY, 'show') !== 'hide';
+const replayTag = (ev) => h('span', { class: 'sp-tag replay',
+  text: ev.played ? `Replay · played ${fmtDate(ev.played, { weekday: 'short', day: 'numeric', month: 'short' })}` : 'Replay' });
 
 // Artwork gaps: every generated crest / competition mark drawn because the Pi had no verified artwork
 // is reported once per entity + place per page load; the Pi keeps one record per entity (first/last
@@ -2447,8 +2440,6 @@ function channelCard(saved, onClick, recent = false) {
   b.addEventListener('click', onClick);
   return b;
 }
-// a row of them
-const channelCards = (list, open, recent = false) => h('div', { class: 'shelf ch-row' }, ...list.map((e) => channelCard(e, () => open(e), recent)));
 
 function openEntry(e, resume) {
   if (e.kind === 'live') { const c = currentChannel(e); playChannel({ id: c.id, name: c.name, img: c.img, num: c.num }); return; }
@@ -2467,9 +2458,9 @@ const LIB_PAGES = { continue: 'Continue watching', channels: 'Favourite channels
 function viewLibrary() {
   const which = state.section;
   const page = which === 'library' && LIB_PAGES[parseHash().id] ? parseHash().id : '';
-  const shelf = () => h('div', { class: page ? 'grid lib-grid' : 'shelf' });
-  const chanRow = (list, open, recent) => (page ? h('div', { class: 'ch-grid' }, ...list.map((e) => channelCard(e, () => open(e), recent)))
-    : channelCards(list, open, recent));
+  const shelf = (...cards) => h('div', { class: page ? 'grid lib-grid' : 'shelf' }, ...cards);
+  const chanRow = (list, open, recent = false) => h('div', { class: page ? 'ch-grid' : 'shelf ch-row' },
+    ...list.map((e) => channelCard(e, () => open(e), recent)));
   // a row's heading: a link to its own page (when it has anything to show)
   const opener = (key, title, n, tag = 'h2', cls = 'section-title') => (n
     ? h(tag, { class: cls }, h('a', { class: 'row-open', href: `#/library/${key}`, 'aria-label': `${title}: see all ${n}` }, title, icon('chev', 'ico sm')))
@@ -2507,7 +2498,7 @@ function viewLibrary() {
     if (!list.length) continue;
     favN += list.length;
     const row = k === 'live' ? chanRow(list, (e) => openEntry({ ...e, kind: k }))
-      : h('div', { class: page ? 'grid lib-grid' : 'shelf' }, list.map((e) => posterCard({ ...e, kind: k }, () => openEntry({ ...e, kind: k }))));
+      : shelf(...list.map((e) => posterCard({ ...e, kind: k }, () => openEntry({ ...e, kind: k }))));
     favRows[key] = [list.length, row];
     favWrap.append(h('div', { class: 'sub-head' }, opener(key, label, list.length, 'h3', 'sub-title'), h('span', { class: 'n', text: String(list.length) })), row);
   }
@@ -2534,7 +2525,7 @@ function viewLibrary() {
   const titles = rec.filter((e) => e.kind !== 'live');
   let recRow = h('div', { class: 'rec-split' },
     chans.length ? chanRow(chans, (e) => openEntry(e), true) : null,
-    titles.length ? h('div', { class: page ? 'grid lib-grid' : 'shelf' }, ...titles.map(titleCard)) : null);
+    titles.length ? shelf(...titles.map(titleCard)) : null);
   // channel cards show what's on (the guide's now/next list) and the channel's category and namesakes
   // (the channel list): both loaded here if Live hasn't been opened, then the page redraws once each
   if (chans.length || store.favs.list('live').length) {
@@ -2590,7 +2581,7 @@ function viewSettings() {
   sportsBox.replaceChildren(h('h2', { text: 'Sports' }),
     h('label', { class: 'pref-row' }, h('span', { text: 'Live scores' }),
       selectEl('Live scores', [['show', 'Show'], ['hide', 'Hide (no spoilers)']], scoresOn() ? 'show' : 'hide', (v) => {
-        try { localStorage.setItem(SCORES_KEY, v); } catch { /* private mode */ }
+        lsSet(SCORES_KEY, v);
         toast('Saved on this device');
       })),
     h('p', { class: 'muted small', text: 'The score and minute on live matches in Sports, updated every minute. Replays never show one. Only this device changes.' }));
@@ -3016,8 +3007,7 @@ function renderInterface(box) {
 // (the Pi's gap registry; the full report is `iptv artwork missing` over SSH)
 function renderArtwork(box) {
   const OPEN_KEY = `${LSK}artOpen`;                     // collapsed unless this device opened it
-  let open = false;
-  try { open = localStorage.getItem(OPEN_KEY) === '1'; } catch { /* private mode */ }
+  let open = lsGet(OPEN_KEY, '0') === '1';
   let pick = 'seen';
   let shownN = 5;                                         // the first 5, then 25 more at a time
   let gaps = [];
@@ -3035,7 +3025,7 @@ function renderArtwork(box) {
   };
   toggle.addEventListener('click', () => {
     open = !open;
-    try { localStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch { /* private mode */ }
+    lsSet(OPEN_KEY, open ? '1' : '0');
     paintOpen();
   });
   const paintRows = () => {

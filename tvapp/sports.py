@@ -32,9 +32,6 @@ FOOTBALL, BASKETBALL, F1, MMA, BOXING, NFL, TENNIS, CRICKET, RUGBY, HOCKEY, HAND
 SPORT_KEYS = {FOOTBALL: "football", BASKETBALL: "basketball", F1: "f1", MMA: "mma", BOXING: "boxing", NFL: "nfl",
               TENNIS: "tennis", CRICKET: "cricket", RUGBY: "rugby", HOCKEY: "hockey", HANDBALL: "handball",
               VOLLEYBALL: "volleyball", OTHER: "other"}
-SPORT_LABELS = {FOOTBALL: "Football", BASKETBALL: "Basketball", F1: "Formula 1", MMA: "UFC / MMA", BOXING: "Boxing",
-                NFL: "NFL", TENNIS: "Tennis", CRICKET: "Cricket", RUGBY: "Rugby", HOCKEY: "Ice hockey",
-                HANDBALL: "Handball", VOLLEYBALL: "Volleyball", OTHER: "Other sport"}
 BY_KEY = {v: k for k, v in SPORT_KEYS.items()}
 
 # kinds of sports programme
@@ -1316,10 +1313,6 @@ def query_groups(words: list[str]) -> list[tuple[int, int, int]]:
         else:
             i += 1
     return out
-
-
-def phrase_ok(e: Entity, text_words: list[str], start: int, length: int) -> bool:
-    return _ok_context(e, text_words, start, start + length)
 
 
 _FOOTBALL_CH = re.compile(r"\b(laliga|la liga|premier league|serie a|bundesliga|ligue 1|eredivisie|mutv|lfctv|lfc tv|"

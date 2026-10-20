@@ -55,7 +55,7 @@ def recording(tail: list[str], speeds: list[float]) -> float:
             secs = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
             speed = float(m.group(4))
             return secs if secs >= 30 and speed >= 4 else 0.0
-    if speeds and len(speeds) >= 2 and min(speeds[-2:]) >= 4:            # a transcode's -progress readings
+    if len(speeds) >= 2 and min(speeds[-2:]) >= 4:            # a transcode's -progress readings
         return 60.0
     return 0.0
 

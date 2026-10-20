@@ -229,7 +229,7 @@ h1, h2, h3, p { margin: 0; }
 .sp-sections { display: flex; flex-direction: column; gap: 16px; transition: opacity .2s; }
 .sp-sections.busy { opacity: .6; }
 .sp-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
-.sp-card { display: flex; flex-direction: column; min-width: 0; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+.sp-card { position: relative; display: flex; flex-direction: column; min-width: 0; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
 .sp-card.is-live { border-color: rgba(255, 90, 95, .35); }
 .sp-main { display: flex; flex-direction: column; gap: 6px; padding: 12px 12px 10px; border: 0; background: transparent; text-align: left; min-width: 0; }
 .sp-main:hover { background: var(--surface-2); }
@@ -247,7 +247,6 @@ h1, h2, h3, p { margin: 0; }
 @media (max-width: 720px) { .sp-list { grid-template-columns: 1fr; } }
 
 /* favourites: a small star, nothing louder */
-.sp-card { position: relative; }
 .sp-card.is-fav .sp-title::before, .prog-title.is-fav::before { content: "\2605"; color: var(--star); font-size: .8em; margin-right: 6px; vertical-align: 1px; }
 .sp-star { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%;
   background: transparent; color: var(--muted); opacity: .55; }
@@ -579,7 +578,6 @@ h1, h2, h3, p { margin: 0; }
 .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .prov-form { display: grid; gap: 10px; padding: 12px 0 4px; }
 .prov-form[hidden], .prov-form .pref-row[hidden] { display: none; }
-.warn { color: var(--bad, #ff5a5f); }
 .gap-list { display: grid; gap: 10px; margin: 10px 0; padding: 0; list-style: none; }
 .gap { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); gap: 2px 10px; align-items: baseline; font-size: 13.5px; }
 .gap-n { font-weight: 700; text-align: right; color: var(--text-2); }
