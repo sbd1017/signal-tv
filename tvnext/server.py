@@ -89,6 +89,7 @@ async def _warm_posters():
     await asyncio.sleep(180)
     while True:
         done = set()
+        missed = False
         for backend in dict.fromkeys([config.BACKEND, *config.SITES.values()]):
             for kind in ("movies", "series"):
                 try:
@@ -97,6 +98,7 @@ async def _warm_posters():
                     keys = await asyncio.to_thread(first_poster_keys, r.content, WARM_PER_KIND, order) if r.status_code == 200 else []
                 except (httpx.HTTPError, ValueError) as e:
                     log.info("poster warm-up: %s %s: %s", backend, kind, e.__class__.__name__)
+                    missed = True
                     continue
                 for key in keys:
                     for variant in ("poster", "poster-s"):
@@ -108,7 +110,7 @@ async def _warm_posters():
                         except (images.Refused, httpx.HTTPError):
                             pass
         log.info("poster warm-up: %d posters ready", len(done))
-        await asyncio.sleep(WARM_EVERY)
+        await asyncio.sleep(600 if missed else WARM_EVERY)       # a site that was restarting: again in 10 minutes
 
 
 async def _housekeeping():
