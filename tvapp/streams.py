@@ -349,6 +349,8 @@ class Engine:
                 cmd += ["-tag:v", "hvc1"]                           # what Safari / iOS require for HEVC
         if job.kind == "live" and job.audio_copy:
             cmd += ["-c:a", "copy"]                                 # stereo AAC already: nothing to do (and no re-encoding loss)
+            if job.container == "fmp4":
+                cmd += ["-bsf:a", "aac_adtstoasc"]                  # the broadcast's ADTS framing -> what MP4 segments need
         else:
             cmd += ["-c:a", "aac", "-b:a", "160k", "-ac", "2", "-ar", "48000"]
         if job.kind == "live":

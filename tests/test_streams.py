@@ -92,6 +92,11 @@ class StartAndSound(unittest.TestCase):
             job.audio_copy = True
             cmd = eng._cmd(job)
             self.assertEqual(cmd[cmd.index("-c:a") + 1], "copy")
+            self.assertNotIn("-bsf:a", cmd)
+            job.container = "fmp4"                                    # 4K HEVC: MP4 segments need the ADTS header converted
+            cmd = eng._cmd(job)
+            self.assertEqual(cmd[cmd.index("-bsf:a") + 1], "aac_adtstoasc")
+            job.container = "ts"
             job.audio_copy = False
             cmd = eng._cmd(job)
             self.assertEqual(cmd[cmd.index("-c:a") + 1], "aac")

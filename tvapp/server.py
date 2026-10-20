@@ -825,7 +825,7 @@ async def epg_now(request: Request):
     the channels whose programme changed since then (a few KB a minute instead of the whole ~180 KB).
     A copy older than the last guide reload, or than two hours, gets the whole list again."""
     since = request.query_params.get("since") or ""
-    if since.isdigit() and S.cat.guide.updated <= int(since) and time.time() - int(since) < 7200:
+    if since.isdigit() and int(S.cat.guide.updated) <= int(since) and time.time() - int(since) < 7200:
         return jresp(request, await asyncio.to_thread(epg_now_delta, int(since)))
     return await cached_list(request, "epg-now", cache="no-store", etag=False)
 
