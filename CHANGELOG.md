@@ -2,6 +2,13 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.14.0 - 2026-10-20
+
+- Faster and lighter: channels hand over at 10 s of picture or 5 segments, whichever first (6 s when converted) - 4K and converted channels start sooner; stereo AAC sound passed through instead of re-encoded; Live asks only for the channels whose programme changed since its copy of now/next (a few KB a minute, not ~180 KB); the newest films' and A-Z series' posters prepared daily for each site; three image resizes at once
+- Public README: a Live demo section linking mubar.uk/signal (made-up provider, Classic in Settings, shared and reset nightly at 04:00)
+- 4K channels with copied sound: the AAC framing MP4 segments need (aac_adtstoasc); the now/next update compares whole seconds with the guide's reload time
+- Poster warm-up: a site that was restarting is tried again in 10 minutes, not the next day
+
 ## v1.13.0 - 2026-10-19
 
 - Live: Also showing is back in view on desktop - one sideways row at every size, between what's on and the guide strip, counted when the picture is sized (a pinned column can't scroll to anything below the window)
