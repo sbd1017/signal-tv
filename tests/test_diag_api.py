@@ -1,4 +1,6 @@
 """Diagnostics report and health status over HTTP: useful content, and never a secret."""
+import os
+from unittest import mock
 import tempfile
 import unittest
 from pathlib import Path
@@ -81,9 +83,21 @@ class Diag(unittest.TestCase):
         self.assertEqual(r.json()["refresh"]["last"]["status"], "rejected")
 
 
+IKEY = "i" * 64
+
+
 class RefreshAccept(unittest.TestCase):
-    """accept=1 (override the refresh guard) only from `iptv` on the Pi, never through nginx."""
-    setUp, tearDown = Diag.setUp, Diag.tearDown
+    """accept=1 (override the refresh guard) only from `iptv` on the Pi (loopback + the internal key)."""
+    def setUp(self):
+        Diag.setUp(self)
+        key_file = Path(self.tmp.name) / "internal-key"
+        key_file.write_text(IKEY + "\n")
+        self.env = mock.patch.dict(os.environ, {"TV_INTERNAL_KEY_FILE": str(key_file)})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        Diag.tearDown(self)
 
     def ask(self, client, headers=None):
         import time
@@ -93,10 +107,12 @@ class RefreshAccept(unittest.TestCase):
         self.assertEqual(c.get("/tv/api/refresh?accept=1", headers=headers or {}).status_code, 200)
         return server.S.cat.accept_next
 
-    def test_only_a_direct_local_request_can_accept(self):
-        self.assertTrue(self.ask(("127.0.0.1", 50000)))
-        self.assertFalse(self.ask(("127.0.0.1", 50000), {"X-Forwarded-For": "203.0.113.9"}), "through nginx")
-        self.assertFalse(self.ask(("203.0.113.9", 50000)))
+    def test_only_iptv_with_the_internal_key_can_accept(self):
+        key = {"X-TV-Internal-Key": IKEY}
+        self.assertTrue(self.ask(("127.0.0.1", 50000), key))
+        self.assertFalse(self.ask(("127.0.0.1", 50000)), "loopback alone proves nothing")
+        self.assertFalse(self.ask(("127.0.0.1", 50000), {"X-TV-Internal-Key": "x" * 64}))
+        self.assertFalse(self.ask(("203.0.113.9", 50000), key), "the key only counts on loopback")
 
 
 if __name__ == "__main__":

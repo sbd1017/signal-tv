@@ -15,7 +15,7 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 
-from tvapp import sports
+from tvapp import internalkey, site_auth, sports
 
 from . import cast, config, fixtures, images, scores, sportsart
 
@@ -39,6 +39,8 @@ class S:
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    if config.SITE_AUTH and site_auth.proxy_key() is None:
+        raise SystemExit("TVN_SITE_AUTH=1 needs the site proxy key (LoadCredential site-proxy-key or SITE_PROXY_KEY_FILE)")
     S.client = httpx.AsyncClient(follow_redirects=False, limits=httpx.Limits(max_connections=8))
     S.lib = sportsart.Library()
     S.acq = sportsart.Acquirer(S.lib, S.client)
@@ -93,7 +95,7 @@ async def _warm_posters():
         for backend in dict.fromkeys([config.BACKEND, *config.SITES.values()]):
             for kind in ("movies", "series"):
                 try:
-                    r = await S.client.get(f"{backend}/tv/api/{kind}", timeout=120)
+                    r = await S.client.get(f"{backend}/tv/api/{kind}", timeout=120, headers=internalkey.headers())
                     order = "added" if kind == "movies" else "name"         # what each page opens on (web-next viewGrid)
                     keys = await asyncio.to_thread(first_poster_keys, r.content, WARM_PER_KIND, order) if r.status_code == 200 else []
                 except (httpx.HTTPError, ValueError) as e:
@@ -298,9 +300,16 @@ async def art_file(kind: str, name: str, size: int):
     return FileResponse(p, media_type="image/webp", headers={"Cache-Control": IMMUTABLE})
 
 
-# ------------------------------------------------------------------ maintenance (loopback only)
+# ------------------------------------------------------------------ maintenance (programs on the Pi only)
 def _local(request: Request) -> bool:
-    return request.client and request.client.host in ("127.0.0.1", "::1") and "x-forwarded-for" not in request.headers
+    """`iptv` or the owner's app, calling on loopback with the internal key (tvapp/internalkey.py)."""
+    return internalkey.ok(request)
+
+
+def _owner(request: Request) -> bool:
+    """The owner, signed in to the central login (nginx's headers + this sidecar's proxy key), or a program on the
+    Pi with the internal key (devproxy). Off unless TVN_SITE_AUTH=1, as in local tests and the isolated preview."""
+    return not config.SITE_AUTH or site_auth.session_from_proxy(request) is not None or internalkey.ok(request)
 
 
 # ------------------------------------------------------------------ crests and logos added by the owner
@@ -357,6 +366,8 @@ async def art_manual(request: Request, id: str = "", sport: str = "", name: str 
     """Settings › Artwork › Add crest: the owner's own site only (a family site's /<site>/next/ never)."""
     if not request.url.path.startswith(("/tv/next/", "/tv-test/")) or not GAP_ID.match(id):
         return Response(status_code=404)
+    if not _owner(request):
+        return JSONResponse({"error": "Signed out. Reload the page to sign in again."}, status_code=401)
     ctype = request.headers.get("content-type", "").split(";")[0].strip()
     body = await request.body()
     if len(body) > MAX_IMAGE:
@@ -460,7 +471,8 @@ async def _guide() -> list[dict] | None:
     out = []
     try:
         for day in ("today", "tomorrow"):
-            r = await S.client.get(f"{config.BACKEND}/tv/api/sports", params={"day": day}, timeout=30)
+            r = await S.client.get(f"{config.BACKEND}/tv/api/sports", params={"day": day}, timeout=30,
+                                   headers=internalkey.headers())
             r.raise_for_status()
             out += r.json().get("events") or []
     except (httpx.HTTPError, ValueError):

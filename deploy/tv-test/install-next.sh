@@ -11,10 +11,12 @@ sudo -n rsync -rt --delete --exclude venv --exclude '__pycache__' --include 'tva
 if [ ! -x "$DEST/venv/bin/python" ]; then sudo -n python3 -m venv "$DEST/venv"; fi
 sudo -n "$DEST/venv/bin/pip" install -q --disable-pip-version-check -r "$DEST/requirements-next.txt"
 sudo -n chown -R root:root "$DEST"
-sudo -n install -m 0644 "$SRC/deploy/tv-test/signal-tv-next.service" /etc/systemd/system/signal-tv-next.service
+sudo -n install -m 0644 "$SRC/deploy/signal-tv-next.service" /etc/systemd/system/signal-tv-next.service
 sudo -n systemctl daemon-reload
 sudo -n systemctl enable --now signal-tv-next.service >/dev/null
 sudo -n systemctl restart signal-tv-next.service
 sleep 2
 systemctl is-active signal-tv-next.service
-curl -s http://127.0.0.1:8792/internal/status | head -c 600; echo
+# /internal/* needs the internal key (tvapp/internalkey.py): from a 0600 temp file, never the command line
+h=$(umask 077; mktemp); sudo -n cat /etc/signal-tv/internal-key | sed 's/^/X-TV-Internal-Key: /' > "$h"
+curl -s -H @"$h" http://127.0.0.1:8792/internal/status | head -c 600; echo; rm -f "$h"

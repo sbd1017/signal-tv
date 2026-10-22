@@ -10,6 +10,7 @@ PY=/opt/signal-tv/venv/bin/python
 API=http://127.0.0.1:8790/tv/api
 DEMO_URL=http://127.0.0.1:8791
 FAMILY=/etc/signal-tv-family
+INTERNAL_KEY=/etc/signal-tv/internal-key
 # `iptv family NAME <command>` runs <command> against that family site (deploy/family.sh)
 SITE=${IPTV_SITE:-}
 if [ -n "$SITE" ]; then
@@ -18,6 +19,16 @@ if [ -n "$SITE" ]; then
   ENV_FILE="$FAMILY/$SITE.env"
   API="http://127.0.0.1:$(sed -n 's/^TV_PORT=//p' "$FAMILY/$SITE.site")/tv/api"
 fi
+
+# Direct calls to the app or the sidecar on loopback carry the internal key (tvapp/internalkey.py): a
+# loopback address alone is not trusted. curl gets it from a 0600 temp file, Python from the environment;
+# it never appears on a command line.
+icurl() {
+  local h rc; h=$(umask 077; mktemp)
+  sudo cat "$INTERNAL_KEY" 2>/dev/null | sed 's/^/X-TV-Internal-Key: /' > "$h"
+  curl -H @"$h" "$@"; rc=$?; rm -f "$h"; return $rc
+}
+ikey() { sudo cat "$INTERNAL_KEY" 2>/dev/null | tr -d '\n'; }
 
 helper() { sudo env TV_CONFIG="$ENV_FILE" "$PY" -c 'import sys; sys.path.insert(0, "/opt/signal-tv"); from tvapp.cli import main; sys.argv[0] = "iptv"; sys.exit(main())' "$@"; }
 setval() { printf '%s\n' "$2" | helper set "$1"; }
@@ -116,7 +127,7 @@ case "$cmd" in
   status)
     systemctl --no-pager --lines=0 status "$SERVICE" | sed -n '1,4p' || true
     systemctl is-active --quiet "$DEMO" && echo "demo provider: running" || echo "demo provider: stopped"
-    if out=$(curl -fsS --max-time 5 "$API/status" 2>/dev/null); then
+    if out=$(icurl -fsS --max-time 5 "$API/status" 2>/dev/null); then
       printf '%s' "$out" | "$PY" -c 'import sys; sys.path.insert(0, "/opt/signal-tv"); from tvapp.cli import main; sys.argv[0] = "iptv"; sys.exit(main())' format-status
     else
       echo "API not answering on ${API%/tv/api}"
@@ -140,10 +151,11 @@ case "$cmd" in
   set-tmdb)
     ask key "TMDB API key or read access token (input hidden; empty = remove)" secret
     # to the sidecar on loopback, on stdin (never in argv); it checks the key with TMDB before keeping it
-    printf '%s' "$key" | python3 -c '
-import json, sys, urllib.request, urllib.error
+    printf '%s' "$key" | TV_INTERNAL_KEY="$(ikey)" python3 -c '
+import json, os, sys, urllib.request, urllib.error
 body = json.dumps({"key": sys.stdin.read().strip()}).encode()
-req = urllib.request.Request("http://127.0.0.1:8792/internal/tmdb-key", data=body, headers={"Content-Type": "application/json"})
+req = urllib.request.Request("http://127.0.0.1:8792/internal/tmdb-key", data=body,
+                             headers={"Content-Type": "application/json", "X-TV-Internal-Key": os.environ.get("TV_INTERNAL_KEY", "")})
 try:
     d = json.loads(urllib.request.urlopen(req, timeout=40).read())
     print("TMDB key saved: the cast shows in the player." if d.get("on") else "TMDB key removed.")
@@ -181,7 +193,7 @@ except OSError as e:
     esac ;;
   refresh)
     if [ "${1:-}" = --accept-changes ]; then
-      curl -fsS --max-time 10 "$API/refresh?accept=1" >/dev/null && echo "The next catalogue refresh will be accepted even if it looks wrong; refreshing now (iptv status to watch)." || echo "API not answering"
+      icurl -fsS --max-time 10 "$API/refresh?accept=1" >/dev/null && echo "The next catalogue refresh will be accepted even if it looks wrong; refreshing now (iptv status to watch)." || echo "API not answering"
     else reload_app; fi ;;
   reload) reload_app ;;
   alert-test) sudo -u signal-tv env TV_STATE_DIR=/var/lib/signal-tv "$PY" -c 'import sys; sys.path.insert(0, "/opt/signal-tv"); from tvapp.alerts import main; sys.exit(main(["test"]))' ;;
@@ -192,7 +204,7 @@ except OSError as e:
     follow=(); n=100
     for a in "$@"; do case "$a" in -f) follow=(-f) ;; *[!0-9]*) ;; *) n=$a ;; esac; done
     sudo journalctl -u "$SERVICE" -u "$DEMO" -n "$n" --no-pager -o short-iso "${follow[@]}" ;;
-  jobs) curl -fsS --max-time 5 "$API/status" | python3 -c 'import json,sys; [print(j) for j in json.load(sys.stdin)["jobs"]] or None' ;;
+  jobs) icurl -fsS --max-time 5 "$API/status" | python3 -c 'import json,sys; [print(j) for j in json.load(sys.stdin)["jobs"]] or None' ;;
   revoke-sessions)
     sudo rm -f /var/lib/signal-tv/secret.key
     sudo systemctl restart "$SERVICE"
@@ -220,15 +232,16 @@ except OSError as e:
       # iptv artwork add "Ruch Chorzów" <image link or file> [sport]: a crest (or a comp:/team:/guest: id's logo) by hand
       [ $# -ge 2 ] || { echo 'usage: iptv artwork add "Club name" | team:<id> | comp:<id>  <https://link | /path/to/image>  [sport]'; exit 2; }
       who=$1; src=$2; sport=${3:-football}
-      python3 - "$who" "$src" "$sport" <<'PY'
-import base64, json, sys, urllib.request, urllib.error
+      TV_INTERNAL_KEY="$(ikey)" python3 - "$who" "$src" "$sport" <<'PY'
+import base64, json, os, sys, urllib.request, urllib.error
 who, src, sport = sys.argv[1:4]
 body = {"sport": sport, **({"id": who} if who.split(":")[0] in ("team", "comp", "guest", "name") else {"name": who})}
 if src.startswith(("http://", "https://")):
     body["url"] = src
 else:
     body["data"] = base64.b64encode(open(src, "rb").read()).decode()
-req = urllib.request.Request("http://127.0.0.1:8792/internal/art-add", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+req = urllib.request.Request("http://127.0.0.1:8792/internal/art-add", data=json.dumps(body).encode(),
+                             headers={"Content-Type": "application/json", "X-TV-Internal-Key": os.environ.get("TV_INTERNAL_KEY", "")})
 try:
     d = json.loads(urllib.request.urlopen(req, timeout=60).read())
     print(f"Saved for {d['id']}: every TV shows it from the next page load.")
@@ -248,7 +261,7 @@ PY
       --json) q=${q/format=text/format=json} ;;
       *) echo "unknown option: $a"; exit 2 ;;
     esac; done
-    curl -fsS --max-time 60 "http://127.0.0.1:8792/internal/missing?$q" \
+    icurl -fsS --max-time 60 "http://127.0.0.1:8792/internal/missing?$q" \
       || { echo "The artwork service (signal-tv-next) is not answering on 127.0.0.1:8792."; exit 1; } ;;
   help|-h|--help) usage ;;
   *) usage; exit 2 ;;

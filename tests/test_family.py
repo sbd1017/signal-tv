@@ -20,6 +20,19 @@ PHRASE = "correct horse battery"
 NGINX = {"X-Forwarded-For": "203.0.113.7"}             # every request from outside comes through nginx
 
 
+import contextlib
+
+
+@contextlib.contextmanager
+def internal_key(case):
+    """The internal key the sidecar, iptv and the owner's app send (tvapp/internalkey.py)."""
+    key = "i" * 64
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "k").write_text(key)
+        with mock.patch.dict(os.environ, {"TV_INTERNAL_KEY_FILE": str(Path(d) / "k")}):
+            yield {"X-TV-Internal-Key": key}
+
+
 class Record(unittest.TestCase):
     def test_hash_verify_and_generations(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -135,12 +148,15 @@ class FamilySite(unittest.TestCase):
         # our own form, with the site's no-referrer policy: the browser says Origin: null
         self.assertEqual(self.login(PHRASE, {"Origin": "null"}).headers["location"], "/mumtv/")
 
-    def test_loopback_is_the_sidecar_and_iptv(self):
+    def test_the_sidecar_and_iptv_need_the_internal_key(self):
         family.set_passphrase(self.rec, PHRASE)
         local = TestClient(server.app, client=("127.0.0.1", 50000))
         self.assertNotEqual(local.get("/tv/api/auth-check").status_code, 500)
-        self.assertEqual(TestClient(server.app, client=("127.0.0.1", 50000)).get("/tv/api/live", headers=NGINX).status_code, 401,
-                         "through nginx (X-Forwarded-For) is never loopback")
+        with internal_key(self) as key:
+            self.assertEqual(local.get("/tv/api/no-such-route").status_code, 401, "loopback alone proves nothing")
+            self.assertEqual(local.get("/tv/api/no-such-route", headers=key).status_code, 404, "the sidecar, iptv: let in")
+            self.assertEqual(TestClient(server.app, client=("203.0.113.7", 50000)).get("/tv/api/no-such-route", headers=key)
+                             .status_code, 401, "the key only counts on loopback")
 
 
 class OwnersPanel(unittest.TestCase):
@@ -251,10 +267,13 @@ class Provider(unittest.TestCase):
             self.assertIn(outside.get("/tv/api/internal/provider", headers=NGINX).status_code, (401, 404))
             self.assertIn(outside.post("/tv/api/internal/provider", json={"type": "m3u", "url": "http://x/a.m3u"}, headers=NGINX).status_code, (401, 404))
             local = TestClient(server.app, client=("127.0.0.1", 50000))
-            r = local.get("/tv/api/internal/provider")
-            self.assertEqual(r.status_code, 200)
-            self.assertNotIn("password", r.text.lower())
-            self.assertEqual(local.post("/tv/api/internal/provider", json={"type": "xtream", "base": "", "username": "", "password": ""}).status_code, 400)
+            self.assertIn(local.get("/tv/api/internal/provider").status_code, (401, 404), "loopback alone proves nothing")
+            with internal_key(self) as key:
+                r = local.get("/tv/api/internal/provider", headers=key)
+                self.assertEqual(r.status_code, 200)
+                self.assertNotIn("password", r.text.lower())
+                self.assertEqual(local.post("/tv/api/internal/provider", headers=key,
+                                            json={"type": "xtream", "base": "", "username": "", "password": ""}).status_code, 400)
 
 
 if __name__ == "__main__":

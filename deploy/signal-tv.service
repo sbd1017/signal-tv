@@ -13,6 +13,8 @@ WorkingDirectory=/opt/signal-tv
 Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 Environment=TV_HOST=127.0.0.1 TV_PORT=8790 TV_CONFIG=/etc/signal-tv/tv.env TV_WEB_DIR=/opt/signal-tv/web TV_LIVE_DIR=/dev/shm/signal-tv
 ExecStart=/opt/signal-tv/venv/bin/python -m tvapp
+# Direct calls between the TV programs on this Pi carry this key (tvapp/internalkey.py; deploy/tv-keys.sh)
+LoadCredential=tv-internal-key:/etc/signal-tv/internal-key
 # `iptv reload` / `iptv refresh`: re-read tv.env and refresh catalogue + guide without a restart
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure

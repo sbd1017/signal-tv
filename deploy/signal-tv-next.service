@@ -15,6 +15,11 @@ Environment=TVN_ART_MODE=cached TVN_IMG_CACHE_MAX_MB=1500 TVN_RESIZE_WORKERS=2
 # your site or email: sent with artwork lookups (Wikimedia asks every client for a contact)
 Environment=TVN_ART_CONTACT=https://example.com
 ExecStart=/opt/signal-tv-next/venv/bin/python -m tvnext
+# Direct calls between the TV programs on this Pi carry this key (tvapp/internalkey.py; deploy/tv-keys.sh)
+LoadCredential=tv-internal-key:/etc/signal-tv/internal-key
+# Owner-only routes (Settings > Artwork > Add crest) check the central login: nginx's headers + this key
+Environment=TVN_SITE_AUTH=1
+LoadCredential=site-proxy-key:/etc/signal-tv/site-proxy-key
 Restart=on-failure
 RestartSec=5
 StateDirectory=signal-tv-next

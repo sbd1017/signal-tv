@@ -22,6 +22,8 @@ from pathlib import Path
 import httpx
 from PIL import Image, ImageOps
 
+from tvapp import internalkey
+
 from . import config
 
 Image.MAX_IMAGE_PIXELS = 40_000_000
@@ -106,7 +108,7 @@ async def get(variant: str, key: str, webp: bool, client: httpx.AsyncClient, bac
     fut = asyncio.get_running_loop().create_future()
     _inflight[job] = fut
     try:
-        r = await client.get(f"{backend or config.BACKEND}/tv/api/img/{key}", timeout=30)
+        r = await client.get(f"{backend or config.BACKEND}/tv/api/img/{key}", timeout=30, headers=internalkey.headers())
         if r.status_code != 200:
             raise Refused(f"source HTTP {r.status_code}")
         t0 = time.perf_counter()

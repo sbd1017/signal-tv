@@ -336,7 +336,7 @@ class Images(unittest.TestCase):
             content = png(2000, 1125, alpha=False, fmt="JPEG")
 
         class Client:
-            async def get(self, url, timeout=None):
+            async def get(self, url, timeout=None, headers=None):    # headers: the internal key for the app
                 calls.append(url)
                 await asyncio.sleep(0.05)
                 return Resp()

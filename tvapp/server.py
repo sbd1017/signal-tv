@@ -1,10 +1,15 @@
 """HTTP layer (FastAPI). Everything is mounted under /tv; nginx forwards the path unchanged.
 
-/tv/                      app shell (nginx: Basic Auth or session cookie)
+/tv/                      app shell (owner: the central login; family site: its passphrase)
 /tv/static/...            JS/CSS/vendor (same protection)
 /tv/pwa/...               manifest + icons (public: iOS fetches them without credentials)
 /tv/api/...               JSON API (same protection as the shell)
 /tv/m/<token>/...         media; authorised by the signed, expiring token in the path
+
+The owner's copy (SITE_AUTH=1) checks the central login itself: nginx's identity headers, from loopback,
+with this app's X-Site-Proxy-Key (site_auth.py). Programs on the Pi that call an app directly (the
+sidecar, `iptv`, the owner's app asking a family site, devproxy) send X-TV-Internal-Key instead
+(internalkey.py); a loopback address alone proves nothing.
 
 /tv/api/state is the only route that accepts POST (nginx allows it there and nowhere
 else under /tv); writes also need a JSON body, the X-TV-Sync header and a same-site Origin.
@@ -33,6 +38,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from starlette.background import BackgroundTask
 
 from . import __version__
+from . import internalkey, site_auth
 from . import config as cfg
 from .auth import CLIENT_RE, COOKIE, COOKIE_DAYS, Keys
 from .catalog import Catalogue, img_key
@@ -382,6 +388,10 @@ def reload_config() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     S.settings = cfg.load()
+    if owner_gate() and site_auth.proxy_key() is None:
+        raise SystemExit("SITE_AUTH=1 needs the site proxy key (LoadCredential site-proxy-key or SITE_PROXY_KEY_FILE)")
+    if internalkey.key() is None:
+        log.warning("no internal key (tv-internal-key): the sidecar, iptv and family-site calls will be refused")
     for d in (S.settings.state_dir, S.settings.cache_dir, S.settings.cache_dir / "img"):
         d.mkdir(parents=True, exist_ok=True)
     S.http = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(15, read=60),
@@ -441,14 +451,24 @@ def set_session(response: Response, gen: int = 0) -> None:
                         secure=True, httponly=True, samesite="lax")
 
 
+def owner_gate() -> bool:
+    """The owner's copy behind the central login checks that login itself (see the module notes)."""
+    return S.settings.auth == "nginx" and os.environ.get("SITE_AUTH") == "1"
+
+
 @app.middleware("http")
 async def session_cookie(request: Request, call_next):
     path = request.url.path
+    if owner_gate() and not path.startswith(OPEN_PATHS) and not internal_request(request) \
+            and site_auth.session_from_proxy(request) is None:
+        # not nginx with a signed-in owner, and not a program on the Pi with the internal key
+        if path.startswith("/tv/api/"):
+            return err(request, 401, "Signed out. Reload the page to sign in again.")
+        return Response("Signed out", status_code=401, media_type="text/plain")
     if S.settings.auth == "passphrase":
-        # a family site: everything but OPEN_PATHS needs this site's passphrase session. Direct loopback
-        # requests (the artwork sidecar fetching images) never come through nginx, which always sets
-        # X-Forwarded-For, so they can't be faked from outside.
-        if not path.startswith(OPEN_PATHS) and not direct_local(request):
+        # a family site: everything but OPEN_PATHS needs this site's passphrase session, except programs on
+        # the Pi with the internal key (the artwork sidecar fetching images, the owner's app, iptv).
+        if not path.startswith(OPEN_PATHS) and not internal_request(request):
             ok, _ = S.keys.cookie_ok(request.cookies.get(COOKIE), S.access.gen())
             if not ok:
                 if path in ("/tv", "/tv/"):
@@ -603,7 +623,7 @@ async def logout(request: Request):
 @app.get("/tv/api/health")
 async def health(request: Request):
     """For the owner's Family sites panel, on loopback only: is this copy up, and set up."""
-    if not direct_local(request):
+    if not internal_request(request):
         return Response(status_code=404)
     c = S.cat.status()
     return jresp(request, {"site": S.settings.site, "base": S.settings.base, "configured": S.settings.configured,
@@ -623,12 +643,13 @@ async def family_list(request: Request):
         info = {**site, "passphrase": "pass" in rec, "changed": rec.get("changed", 0), "signed_out": rec.get("signed_out", 0),
                 "up": False}
         try:
-            r = await S.http.get(f"http://127.0.0.1:{site['port']}/tv/api/health", timeout=2)
+            r = await S.http.get(f"http://127.0.0.1:{site['port']}/tv/api/health", timeout=2, headers=internalkey.headers())
             if r.status_code == 200:
                 h = r.json()
                 info.update(up=True, configured=h.get("configured"), counts=h.get("counts"), updated=h.get("updated"),
                             error=h.get("error"), streams=h.get("streams"))
-                p = await S.http.get(f"http://127.0.0.1:{site['port']}/tv/api/internal/provider", timeout=2)
+                p = await S.http.get(f"http://127.0.0.1:{site['port']}/tv/api/internal/provider", timeout=2,
+                                     headers=internalkey.headers())
                 if p.status_code == 200:
                     info["provider"] = p.json()
         except (httpx.HTTPError, ValueError):
@@ -650,7 +671,7 @@ async def family_change(name: str, action: str, request: Request):
         # the family site checks the details with its provider and keeps them; they pass through here only
         try:
             body = await read_json(request)
-            r = await S.http.post(f"http://127.0.0.1:{site['port']}/tv/api/internal/provider", json=body,
+            r = await S.http.post(f"http://127.0.0.1:{site['port']}/tv/api/internal/provider", json=body, headers=internalkey.headers(),
                                   timeout=httpx.Timeout(10, read=60))
         except StateError as e:
             return err(request, 400, str(e))
@@ -700,7 +721,8 @@ async def tmdb_key(request: Request):
     if not isinstance(key, str) or len(key) > 2000:
         return err(request, 400, "Paste the key from themoviedb.org › Settings › API.")
     try:
-        r = await S.http.post(f"{SIDECAR}/internal/tmdb-key", json={"key": key.strip()}, timeout=httpx.Timeout(5, read=30))
+        r = await S.http.post(f"{SIDECAR}/internal/tmdb-key", json={"key": key.strip()}, headers=internalkey.headers(),
+                              timeout=httpx.Timeout(5, read=30))
         d = r.json()
     except (httpx.HTTPError, ValueError):
         return err(request, 502, "The artwork service on the Pi isn't answering (signal-tv-next).")
@@ -743,14 +765,14 @@ async def backup_set(request: Request):
 # ---- a family site's provider, from the owner's Settings (forwarded by the owner's app on loopback only)
 @app.get("/tv/api/internal/provider")
 async def internal_provider(request: Request):
-    if S.settings.auth != "passphrase" or not direct_local(request):
+    if S.settings.auth != "passphrase" or not internal_request(request):
         return Response(status_code=404)
     return jresp(request, family.provider_summary(S.settings))
 
 
 @app.post("/tv/api/internal/provider")
 async def internal_provider_set(request: Request):
-    if S.settings.auth != "passphrase" or not direct_local(request):
+    if S.settings.auth != "passphrase" or not internal_request(request):
         return Response(status_code=404)
     try:
         body = await read_json(request)
@@ -780,7 +802,7 @@ async def status(request: Request):
     st["limits"] = {"live": S.settings.max_live, "vod": S.settings.max_vod}
     st["ui"] = {"new": bool(new_ui()), "default": ui_default(), "this": ui_for(request), "classic": S.settings.classic}
     st["state"] = await asyncio.to_thread(S.state.summary)
-    st["backups"] = (S.backups.summary() if S.settings.auth == "nginx" or direct_local(request) else [len(S.backups.items)]) if S.backups is not None else []
+    st["backups"] = (S.backups.summary() if S.settings.auth == "nginx" or internal_request(request) else [len(S.backups.items)]) if S.backups is not None else []
     st["list_cache_kb"] = {k: v >> 10 for k, v in S.lists.sizes().items()}
     st["memory"] = {**{k: v for k, v in memory_usage().items() if k != "jobs"}, **S.guard.summary()}
     st["health"] = await asyncio.to_thread(health_report)
@@ -1067,16 +1089,17 @@ async def series_one(iid: str, request: Request):
     })
 
 
-def direct_local(request: Request) -> bool:
-    """A request made on this machine straight to the app (`iptv` on the Pi), not through nginx."""
-    return bool(request.client) and request.client.host in ("127.0.0.1", "::1") and "x-forwarded-for" not in request.headers
+def internal_request(request: Request) -> bool:
+    """A program on this machine calling the app directly (iptv, the sidecar, the owner's app, devproxy):
+    loopback plus the internal key. A loopback address alone is not enough - any process can connect."""
+    return internalkey.ok(request)
 
 
 @app.get("/tv/api/refresh")
 async def manual_refresh(request: Request):
     # accept=1 overrides the refresh guard, so only `iptv refresh --accept-changes` may send it: a plain
     # GET, it could otherwise be triggered from another site through a signed-in browser
-    if request.query_params.get("accept") == "1" and direct_local(request):
+    if request.query_params.get("accept") == "1" and internal_request(request):
         S.cat.accept_next = True            # `iptv refresh --accept-changes`
         log.info("refresh: the next refresh will be accepted even if it looks wrong")
     if time.time() - S.last_manual < 60 or S.cat.refreshing:

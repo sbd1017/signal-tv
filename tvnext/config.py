@@ -5,6 +5,8 @@ from pathlib import Path
 STATE = Path(os.environ.get("TVN_STATE", "/var/lib/signal-tv-next"))       # durable: sports artwork library
 CACHE = Path(os.environ.get("TVN_CACHE", "/var/cache/signal-tv-next"))     # regenerable: image derivatives
 BACKEND = os.environ.get("TVN_BACKEND", "http://127.0.0.1:8790")            # the live app (read only)
+# behind the central login (the unit sets it): owner-only routes check nginx's headers and the proxy key
+SITE_AUTH = os.environ.get("TVN_SITE_AUTH") == "1"
 # family sites (tvapp/family.py): "<base>/next" -> that copy's own app, for its channel logos and posters
 FAMILY_DIR = Path(os.environ.get("TVN_FAMILY_DIR", "/etc/signal-tv-family"))
 

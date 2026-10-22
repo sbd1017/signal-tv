@@ -22,6 +22,8 @@ Environment=TV_LIVE_DIR=/dev/shm/signal-tv-%i TV_UI_DIR=/opt/signal-tv-ui-%i
 # no classic interface (it only works at /tv); match alerts and failure messages are the owner's, not theirs
 Environment=TV_AUTH=passphrase TV_CLASSIC=0 TV_ACCESS_FILE=/var/lib/signal-tv/family/%i.json TV_TELEGRAM_FILE=/nonexistent
 ExecStart=/opt/signal-tv/venv/bin/python -m tvapp
+# Direct calls between the TV programs on this Pi carry this key (tvapp/internalkey.py; deploy/tv-keys.sh)
+LoadCredential=tv-internal-key:/etc/signal-tv/internal-key
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5

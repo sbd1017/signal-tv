@@ -1,7 +1,13 @@
 """Local preview of web-next (the /tv-test interface) against a running backend.
 
     ssh -f -N -L 8790:127.0.0.1:8790 -L 8792:127.0.0.1:8792 pi   # the real app + the tvnext sidecar
-    python3 tools/devproxy.py [port] [--read-only]                  # then open http://localhost:8797/tv-test/
+    python3 tools/devproxy.py [port] --read-only --pi-key pi       # then open http://localhost:8797/tv-test/
+
+--pi-key HOST fetches the Pi's internal key once at start (ssh HOST sudo -n cat /etc/signal-tv/internal-key)
+and keeps it in memory only: never on disk or a command line. It goes as X-TV-Internal-Key with everything
+forwarded to the app and the sidecar, which trust no loopback request without it (tvapp/internalkey.py).
+Without --pi-key nothing is sent: right for an isolated local stack (no SITE_AUTH), refused by the Pi.
+Family sites (--family) never get it: they are forwarded as from outside, so they need their passphrase.
 
 --read-only refuses every write to the synced state (POST /tv/api/state) and to the Pi's artwork-gap
 registry (POST /tv-test/api/art/gaps): use it for testing and screenshots, so nothing done here
@@ -19,6 +25,7 @@ writes accepts this page exactly as it accepts example.com.
 import http.client
 import http.server
 import os
+import subprocess
 import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web-next")
@@ -38,6 +45,20 @@ TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": 
          ".png": "image/png", ".webmanifest": "application/manifest+json", ".json": "application/json",
          ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8"}
 HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-authorization", "proxy-authenticate"}
+# never passed on from the browser: only this proxy (and nginx on the Pi) may set them
+TRUSTED = {"x-tv-internal-key", "x-site-user", "x-site-csrf", "x-site-expires", "x-site-proxy-key"}
+PI_KEY_HOST = sys.argv[sys.argv.index("--pi-key") + 1] if "--pi-key" in sys.argv[:-1] else ""
+INTERNAL_KEY = ""
+
+
+def fetch_pi_key(host: str) -> str:
+    """The Pi's internal key, over SSH, into memory only."""
+    r = subprocess.run(["ssh", "-o", "BatchMode=yes", host, "sudo -n cat /etc/signal-tv/internal-key"],
+                       capture_output=True, text=True, timeout=20)
+    key = r.stdout.strip()
+    if r.returncode != 0 or len(key) < 32:
+        sys.exit(f"--pi-key {host}: could not read the internal key over SSH ({r.stderr.strip() or 'empty'})")
+    return key
 
 
 class H(http.server.BaseHTTPRequestHandler):
@@ -60,9 +81,10 @@ class H(http.server.BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         site = next((n for n in FAMILY if path.startswith(f"/{n}/")), None)
         if site and path.startswith(f"/{site}/next/"):
-            self.proxy(SIDECAR)
+            self.proxy(SIDECAR, internal=False)
         elif site:
-            self.proxy(FAMILY[site], "/tv/" + self.path[len(site) + 2:], {"X-Forwarded-For": self.client_address[0]})
+            self.proxy(FAMILY[site], "/tv/" + self.path[len(site) + 2:], {"X-Forwarded-For": self.client_address[0]},
+                       internal=False)
         elif path in ("/", "/tv-test"):
             self.send_response(308)
             self.send_header("Location", "/tv-test/")
@@ -101,10 +123,12 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def proxy(self, upstream, path=None, extra=None):
+    def proxy(self, upstream, path=None, extra=None, internal=True):
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n) if n else None
-        headers = {**{k: v for k, v in self.headers.items() if k.lower() not in HOP}, **(extra or {})}
+        headers = {**{k: v for k, v in self.headers.items() if k.lower() not in HOP | TRUSTED}, **(extra or {})}
+        if internal and INTERNAL_KEY:
+            headers["X-TV-Internal-Key"] = INTERNAL_KEY
         conn = http.client.HTTPConnection(upstream, timeout=120)
         try:
             conn.request(self.command, path or self.path, body=body, headers=headers)
@@ -112,6 +136,8 @@ class H(http.server.BaseHTTPRequestHandler):
         except OSError as e:
             self.send_error(502, f"backend unreachable ({e}) - is the SSH tunnel up?")
             return
+        if r.status == 401 and internal and not INTERNAL_KEY and upstream in (BACKEND, SIDECAR):
+            sys.stderr.write("401 from the backend: against the Pi, add --pi-key pi\n")
         self.send_response(r.status, r.reason)
         chunked = r.getheader("Content-Length") is None and self.command != "HEAD" and r.status not in (204, 304)
         for k, v in r.getheaders():
@@ -139,4 +165,7 @@ class H(http.server.BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8797)
+    if PI_KEY_HOST:
+        INTERNAL_KEY = fetch_pi_key(PI_KEY_HOST)
+        sys.stderr.write(f"internal key from {PI_KEY_HOST}: in memory, sent to the app and the sidecar\n")
     http.server.ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()

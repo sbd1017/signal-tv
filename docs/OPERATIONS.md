@@ -36,11 +36,11 @@ Cloudflare Tunnel -> nginx 127.0.0.1:8081 -> /tv/... -> 127.0.0.1:8790 (signal-t
 ```
 
 - **`/tv/`, `/tv/api/`, `/tv/static/`**
-  - Uses the site's existing Basic Auth (`snippets/site-basic-auth.conf`, realm "Private apps").
-  - After a successful Basic Auth request, the app sets an HttpOnly, Secure, SameSite=Lax cookie `tv_s`. It is HMAC-signed and lasts 30 days.
-  - nginx accepts that cookie in place of Basic Auth through `auth_request` (`satisfy any`). This means the iPhone home-screen app does not ask for the password on every launch.
-  - Only nginx can grant the cookie: it overwrites `X-TV-Auth-User` with `$remote_user`.
-  - `iptv revoke-sessions` signs out every remembered device.
+  - Behind the site's central login (since Oct 2026): nginx runs `auth_request` for the whole site and passes the result in `X-Site-User` / `X-Site-CSRF` / `X-Site-Expires` (`snippets/site-identity.conf`).
+  - The app checks that login itself (`SITE_AUTH=1`, `deploy/signal-tv.service.d/site-auth.conf`), and believes those headers only from loopback together with `X-Site-Proxy-Key`. nginx sends that key from a root-only snippet (`snippets/signal-tv-proxy-key.conf`) and the app gets the same value through systemd `LoadCredential`, so another process on the Pi can't pose as you. Without the key the app refuses to start.
+  - Programs on the Pi that call the app or the artwork sidecar directly (the sidecar itself, `iptv`, the owner's app asking a family site, `tools/devproxy.py` over SSH) send `X-TV-Internal-Key` instead (`tvapp/internalkey.py`). A loopback address alone, with or without `X-Forwarded-For`, is not trusted.
+  - Both keys: `sudo deploy/tv-keys.sh` writes `/etc/signal-tv/internal-key`, `/etc/signal-tv/site-proxy-key` and the nginx snippet (all root 0600). Rotate: delete the file(s), run it again, `daemon-reload`, reload nginx, restart `signal-tv`, the family sites and `signal-tv-next`.
+  - The old `tv_s` device cookie (Basic Auth era) stays in the code for rollback; `iptv revoke-sessions` still signs those out.
 - **`/tv/m/<token>/…`** (video)
   - Has no login. It is authorised by a signed token in the path that expires after 12 hours.
   - Each token is scoped to one stream job or one catalogue item, because AVPlayer, PiP and AirPlay don't reliably send credentials.
