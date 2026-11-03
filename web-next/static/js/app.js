@@ -50,6 +50,22 @@ function fitLiveColumn() {
   }).observe(col);
 }
 
+// Live on a wide screen: the page (the channel list) scrolls only with the pointer over the list, not over
+// the pinned player beside it. Anything in the player's column that scrolls on its own still does.
+function wheelOnlyOverList() {
+  const main = $('main');
+  const wide = matchMedia('(min-width: 901px)');
+  main.addEventListener('wheel', (e) => {
+    if (e.ctrlKey || !wide.matches || !main.classList.contains('live-mode') || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    for (let el = e.target; el && el !== main; el = el.parentElement) {
+      if (el === $('view')) return;
+      const room = e.deltaY < 0 ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+      if (room && /auto|scroll/.test(getComputedStyle(el).overflowY)) return;
+    }
+    e.preventDefault();
+  }, { passive: false });
+}
+
 const player = new Player({
   onChannel: (d) => stepChannel(d),
   onLastChannel: () => lastChannel(),
@@ -3211,6 +3227,7 @@ if (!location.hash) history.replaceState(null, '', `#/${startPage()}`);
 route();
 requestAnimationFrame(moveTabIndicator);
 fitLiveColumn();
+wheelOnlyOverList();
 loadStatus();
 setInterval(loadStatus, 120000);
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
