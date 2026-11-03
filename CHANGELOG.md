@@ -2,6 +2,13 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.16.0 - 2026-11-03
+
+- Public README: Also showing, recordings caught, live scores, how the best feed is picked, Library grid pages, start-up times, backup provider, per-device layout, other households; Pi steps now include tv-keys.sh and how to swap the site-wide login for Basic Auth
+- Memory cgroups note: step 1 (a week of per-unit peaks) is running on the Pi (memsample.timer)
+- Ignore secrets, databases, logs and key files (security audit)
+- Public export: refuse secret-shaped strings and this network's addresses, in binary files too
+
 ## v1.15.0 - 2026-10-20
 
 - Tidy-up: unused definitions and dead CSS removed (old section-head / prog-ch / just-picked rules, filmMeta, SLOTS, QUALITY, SPORT_LABELS, phrase_ok, IMAGE_SUBS, SOURCE, TEXT_SUFFIXES); split CSS rules merged; storage settings through lsGet/lsSet; single-use helpers inlined; redundant guards on provider replies dropped. Classic: its warnings are amber again (a duplicate .warn rule had made them red)
