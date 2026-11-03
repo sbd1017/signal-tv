@@ -42,13 +42,26 @@ classics). Image credits: [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS
 ## What it does
 
 - **Live TV** with now and next, progress bars and a full guide for each channel. Channel up and down,
-  previous channel, and a mini player that keeps the channel going while you browse.
+  previous channel, and a mini player that keeps the channel going while you browse. **Also showing**
+  lists the other channels with the same match or programme. A "live" channel that turns out to be a
+  short recording on repeat is stopped with a plain message and left out for a few hours.
 - **Sports**: the day's matches from the guide as one card each, whatever each broadcaster calls them,
-  with team crests and competition logos, the best feed for your device first, and the others a tap
-  away. Favourite teams and competitions, and optional alerts before kick-off.
+  with team crests, competition logos and the competition under the teams. Live scores and the match
+  clock come from ESPN's public scoreboards (each device can hide them), and Live now leads with the
+  biggest match. The best feed for your device comes first: smooth playback, then picture quality,
+  with English or international broadcasters first if you choose. The others are a tap away. Replays
+  are marked with the day they were played. Favourite teams and competitions get their own For You tab,
+  with optional alerts before kick-off.
 - **Films and series** with posters, details, resume, mark as watched, next episode and an episode
   filter. When the provider has the same title in several languages, the page lists them, and shows
   an English description when the version you opened doesn't have one.
+- **Library**: favourite films, series and channels, Continue watching and Recently played. Each row
+  opens as its own page with everything in a grid.
+- **Quick to start**: on a Pi 5 most channels play in about a second, 4K channels in about 5 seconds
+  and converted ones in 6 or 7. Stereo AAC sound is passed through rather than re-encoded, and the
+  now-and-next listing refreshes by sending only the channels that changed.
+- **A backup provider** for Live TV: a channel that won't start on your main subscription plays from
+  the second one instead, or you can switch by hand.
 - **Search** across channel names and what's on now and in the next 24 hours. "Man Utd" finds
   Manchester United and "UCL" finds the Champions League.
 - **Plays nearly anything** on an iPhone: streams the browser can't play (MKV, AC-3, MPEG-2, interlaced
@@ -57,7 +70,10 @@ classics). Image credits: [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS
   shared by every device, with export and import.
 - Works as a home-screen app on iPhone, with picture-in-picture, AirPlay, lock-screen controls and
   keyboard shortcuts on a laptop.
-- Hide the channels and categories you never watch, on every device at once.
+- Hide the channels and categories you never watch, on every device at once. Each device keeps its own
+  layout: the page it opens on, its Sports tab, and Classic or the new interface.
+- **Other households** can have their own copy at their own address, from the same install, each with
+  its own provider, library and passphrase (`iptv family add`).
 - **More like this** on every film and series, and an optional **cast strip in the player** (who's in
   the film or episode, with photos and characters) when you add a free TMDB key.
 - Daily backups, optional Telegram alerts when something breaks, and an `iptv` command for everything
@@ -110,14 +126,30 @@ backups, and the `iptv` command. In short:
 
 1. Copy the repo to the Pi and run `deploy/install.sh`. It installs the app in `/opt/signal-tv` and
    builds the new interface.
-2. Install the systemd units and nginx snippets from `deploy/`, and the artwork service with
+2. Run `sudo deploy/tv-keys.sh`. It creates the keys the services use to trust each other on the Pi
+   (kept root-only and handed over by systemd). The services won't start without them.
+3. Install the systemd units and nginx snippets from `deploy/`, and the artwork service with
    `deploy/tv-test/install-next.sh`.
-3. Put your provider in `/etc/signal-tv/tv.env` (`iptv config`, or start from `tv.env.example`),
+4. Put your provider in `/etc/signal-tv/tv.env` (`iptv config`, or start from `tv.env.example`),
    then `iptv reload`.
-4. Pick the interface devices get by default with `iptv ui new` or `iptv ui classic`.
+5. Pick the interface devices get by default with `iptv ui new` or `iptv ui classic`.
 
-Put it behind HTTPS and a login before it faces the internet. The repo's nginx files assume Basic Auth
-and a Cloudflare Tunnel in front, but any reverse proxy that does the same will work.
+Put it behind HTTPS and a login before it faces the internet. The nginx and systemd files are the ones
+running on my Pi, behind a Cloudflare Tunnel and a site-wide login that the app checks itself
+(`SITE_AUTH=1`). That login isn't part of this repo. For plain Basic Auth instead:
+
+1. Delete `deploy/signal-tv.service.d/site-auth.conf` (or don't install it).
+2. In `deploy/signal-tv.conf`:
+   - at the top of `location ^~ /tv/`, replace the line `# Site-wide authentication inherited.` with
+     `auth_basic "Signal TV";` and `auth_basic_user_file /etc/nginx/signal-tv.htpasswd;`;
+   - change every `$site_user` to `$remote_user`;
+   - delete every `include snippets/site-identity.conf;` and `include snippets/signal-tv-proxy-key.conf;`
+     line;
+   - in `location = /tv`, replace the `try_files` line with `return 301 /tv/;`.
+3. Create the password file with `sudo htpasswd -c /etc/nginx/signal-tv.htpasswd yourname` (from
+   `apache2-utils`).
+
+Any reverse proxy that does the same will work.
 
 Set `TVN_ART_CONTACT` (in the artwork service's unit) to your own site or email: it's sent with the
 artwork lookups, as Wikimedia asks.
