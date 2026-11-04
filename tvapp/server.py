@@ -600,6 +600,7 @@ async def login(request: Request):
     phrase = (parse_qs(body.decode("utf-8", "replace")).get("passphrase") or [""])[0]
     if not S.access.is_set():
         return RedirectResponse(f"{b}/?e=3", status_code=303)
+    await asyncio.sleep(S.throttle.wait())
     if not phrase or not await asyncio.to_thread(S.access.verify, phrase):
         S.throttle.failed(ip)
         log.info("family site %s: wrong passphrase", S.settings.site or b)

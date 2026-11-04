@@ -119,19 +119,32 @@ class Access:
 
 # ------------------------------------------------------------------ guessing
 class Throttle:
-    """Wrong passphrases: 5 per address per 15 minutes, 40 per site per hour, then a wait."""
+    """Wrong passphrases: 5 per address per 15 minutes. Past 40 per site per hour each check waits its turn instead
+    of being refused, so strangers can slow guessing down but can't lock the household out."""
+
+    PACE_SECONDS, MAX_WAIT = 15.0, 45.0
 
     def __init__(self, per_ip: int = 5, ip_window: int = 900, per_site: int = 40, site_window: int = 3600, clock=time.time):
         self.per_ip, self.ip_window, self.per_site, self.site_window, self.clock = per_ip, ip_window, per_site, site_window, clock
         self.fails: dict[str, list[float]] = {}
         self.site: list[float] = []
+        self.next_slot = 0.0
 
     def blocked(self, ip: str) -> bool:
         now = self.clock()
         self.site = [t for t in self.site if now - t < self.site_window]
         mine = [t for t in self.fails.get(ip, []) if now - t < self.ip_window]
         self.fails[ip] = mine
-        return len(mine) >= self.per_ip or len(self.site) >= self.per_site
+        return len(mine) >= self.per_ip or (len(self.site) >= self.per_site and self.next_slot - now > self.MAX_WAIT)
+
+    def wait(self) -> float:
+        """Seconds this check must wait for its turn (0 below the hourly cap). Takes the turn."""
+        if len(self.site) < self.per_site:
+            return 0.0
+        now = self.clock()
+        slot = max(now, self.next_slot)
+        self.next_slot = slot + self.PACE_SECONDS
+        return slot - now
 
     def failed(self, ip: str) -> None:
         now = self.clock()

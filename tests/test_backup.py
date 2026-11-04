@@ -59,6 +59,34 @@ class UserCopy(unittest.TestCase):
                                  "state-20260103T000000Z.json", "state-20260103T000000Z.sqlite3"])
         self.assertEqual(oct((out / "user-state" / names[0]).stat().st_mode & 0o777), "0o640")
 
+    def test_user_copy_never_follows_a_planted_symlink(self):
+        secret = self.tmp / "shadow"
+        secret.write_text("root secret")
+        out = self.tmp / "out"
+        out.mkdir()
+        db, js = self.snap("20260101T000000Z")
+        db.unlink()
+        db.symlink_to(secret)                                # a snapshot that is really a link to a secret
+        backup._keep_user_copy((db, js), out, keep=5)
+        self.assertFalse((out / "user-state" / db.name).exists(), "the link was not copied")
+        self.assertTrue((out / "user-state" / js.name).is_file(), "the real file still was")
+        # a link planted where the copy will land: replaced, not written through
+        victim = self.tmp / "victim"
+        victim.write_text("untouched")
+        (out / "user-state" / js.name).unlink()
+        (out / "user-state" / js.name).symlink_to(victim)
+        backup._keep_user_copy((js,), out, keep=5)
+        self.assertEqual(victim.read_text(), "untouched")
+        self.assertFalse((out / "user-state" / js.name).is_symlink())
+        # user-state itself swapped for a link to somewhere else: refused outright
+        shutil.rmtree(out / "user-state")
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        (out / "user-state").symlink_to(elsewhere)
+        with self.assertRaises(OSError):
+            backup._keep_user_copy((js,), out, keep=5)
+        self.assertEqual(list(elsewhere.iterdir()), [])
+
     def test_real_snapshot_copy_carries_sports_state(self):
         """state.db -> nightly snapshot -> the user-state copy that goes to Google Drive: sports
         favourites, the alert setting and the sent-alert record are all in it."""

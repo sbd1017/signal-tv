@@ -148,6 +148,14 @@ def _mtime(p: Path) -> float:
         return 0.0
 
 
+def _auth_mode(value: str) -> str:
+    """Anything unknown stops the app: a typo must not quietly mean "the owner's mode"."""
+    value = value.strip()
+    if value not in ("", "nginx", "passphrase"):
+        raise SystemExit(f"TV_AUTH must be nginx or passphrase, not {value!r}")
+    return value or "nginx"
+
+
 def load() -> Settings:
     env = read_env(CONFIG_PATH)
     state = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/signal-tv").split(":")[0])
@@ -184,7 +192,7 @@ def load() -> Settings:
         memory_limit_mb=int(_num(os.environ, "TV_MEMORY_LIMIT_MB", 2048)),
         timezone=system_timezone(),
         base=_base(os.environ.get("TV_BASE", "/tv")),
-        auth="passphrase" if os.environ.get("TV_AUTH", "").strip() == "passphrase" else "nginx",
+        auth=_auth_mode(os.environ.get("TV_AUTH", "")),
         site=re.sub(r"[^a-z0-9-]", "", os.environ.get("TV_SITE", "").lower())[:30],
         access_file=Path(os.environ["TV_ACCESS_FILE"]) if os.environ.get("TV_ACCESS_FILE") else None,
         classic=os.environ.get("TV_CLASSIC", "1") != "0",

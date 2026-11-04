@@ -67,6 +67,24 @@ class Record(unittest.TestCase):
         t[0] += 901
         self.assertFalse(th.blocked("a"), "after 15 minutes")
 
+    def test_throttle_across_the_site_slows_rather_than_refuses(self):
+        t = [1000.0]
+        th = family.Throttle(per_site=3, clock=lambda: t[0])
+        for ip in "abc":
+            self.assertEqual(th.wait(), 0)
+            th.failed(ip)
+        waits = []
+        for _ in range(4):
+            self.assertFalse(th.blocked("household"))
+            waits.append(th.wait())
+        self.assertEqual(waits, [0, 15, 30, 45])
+        self.assertTrue(th.blocked("household"), "a long queue: wait a moment")
+        t[0] += 60
+        self.assertFalse(th.blocked("household"))
+        t[0] += 3600
+        self.assertFalse(th.blocked("household"))
+        self.assertEqual(th.wait(), 0, "an hour on, back to normal")
+
     def test_sites(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)

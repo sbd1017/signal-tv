@@ -38,9 +38,12 @@ password file /etc/nginx/private.htpasswd (shared by all private apps).
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fnmatch
 import grp
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -101,6 +104,13 @@ def state_snapshot(keep: int) -> list[Path]:
     return snapshot(STATE_DB, SNAP_DIR, keep=keep, app_version=__version__)
 
 
+def _owner_group(fd: int) -> None:
+    try:
+        os.fchown(fd, 0, grp.getgrnam("pi").gr_gid)
+    except (KeyError, PermissionError):
+        pass
+
+
 def _owner_readable(path: Path, mode: int = 0o640) -> None:
     """root:pi 0640 (0750 for a directory): the Pi's owner can copy/upload it, other users cannot."""
     os.chmod(path, mode)                    # explicit: the unit's UMask would otherwise make it 0600
@@ -111,17 +121,39 @@ def _owner_readable(path: Path, mode: int = 0o640) -> None:
 
 
 def _keep_user_copy(snaps: tuple[Path, Path], out_dir: Path, keep: int) -> None:
+    """Runs as root in a folder the service user can write, so nothing here follows a symlink planted there: not
+    the snapshots, not user-state, not a file inside it (that would copy /etc/shadow to Google Drive)."""
     dest = out_dir / "user-state"
     dest.mkdir(exist_ok=True)
-    _owner_readable(dest, 0o750)
-    for src in snaps:
-        if src.exists():
-            target = dest / src.name
-            shutil.copyfile(src, target)
-            _owner_readable(target)
-    for pattern in ("state-*.sqlite3", "state-*.json"):
-        for old in sorted(dest.glob(pattern))[:-keep]:
-            old.unlink()
+    dfd = os.open(dest, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fchmod(dfd, 0o750)
+        _owner_group(dfd)
+        for src in snaps:
+            try:
+                sfd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            except FileNotFoundError:
+                continue
+            except OSError as e:
+                print(f"skipped {src.name}: {e.strerror}", file=sys.stderr)
+                continue
+            with os.fdopen(sfd, "rb") as fsrc:
+                if not stat.S_ISREG(os.fstat(sfd).st_mode):
+                    print(f"skipped {src.name}: not a regular file", file=sys.stderr)
+                    continue
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(src.name, dir_fd=dfd)      # a new file, never through whatever was at this name
+                tfd = os.open(src.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o640, dir_fd=dfd)
+                with os.fdopen(tfd, "wb") as fdst:
+                    shutil.copyfileobj(fsrc, fdst)
+                    os.fchmod(tfd, 0o640)
+                    _owner_group(tfd)
+        names = os.listdir(dfd)
+        for pattern in ("state-*.sqlite3", "state-*.json"):
+            for old in sorted(fnmatch.filter(names, pattern))[:-keep]:
+                os.unlink(old, dir_fd=dfd)
+    finally:
+        os.close(dfd)
 
 
 def _add_code(tar: tarfile.TarFile, root: Path) -> None:
