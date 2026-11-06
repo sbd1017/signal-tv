@@ -571,7 +571,7 @@ both ways), so switching loses nothing.
 
 ## Family sites (other households)
 
-Other households can have their own copy of the app at their own address (for example `/mumtv`),
+Other households can have their own copy of the app at their own address (for example `/family1`),
 each with **its own provider subscription**, favourites, history and settings, and **one
 passphrase** that you set. They see the new interface only (no Classic); match alerts and failure
 messages stay yours. Code: `tvapp/family.py`; one copy of the code runs them all.

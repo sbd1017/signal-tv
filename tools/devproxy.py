@@ -35,8 +35,8 @@ BACKEND = os.environ.get("TV_BACKEND", "127.0.0.1:8790")
 SIDECAR = os.environ.get("TV_SIDECAR", "127.0.0.1:8792")              # tvnext: /tv-test/img|art|api
 READ_ONLY = "--read-only" in sys.argv
 SIDECAR_WRITES = "--sidecar-writes" in sys.argv
-# --family mumtv=127.0.0.1:8793: a family site (tvapp/family.py) as nginx serves it - /mumtv/next/ to the
-# sidecar, the rest to that app with /mumtv/ mapped onto its /tv/, marked as coming from outside
+# --family family1=127.0.0.1:8793: a family site (tvapp/family.py) as nginx serves it - /family1/next/ to the
+# sidecar, the rest to that app with /family1/ mapped onto its /tv/, marked as coming from outside
 FAMILY = dict(a.split("=", 1) for a in sys.argv[sys.argv.index("--family") + 1:] if "=" in a) if "--family" in sys.argv else {}
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
        "media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; manifest-src 'self'; font-src 'self'; "

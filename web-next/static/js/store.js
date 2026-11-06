@@ -11,7 +11,7 @@
 // data from another. Volume, mute and the last search stay on this device only.
 
 const BASE = '/tv/api';
-// Each site keeps its own local copy. Family sites (/mumtv…) share the browser's storage with /tv on
+// Each site keeps its own local copy. Family sites (/family1…) share the browser's storage with /tv on
 // the same domain: without this, a device that had used /tv would treat the family site's database
 // as a reset Pi and send it everything (resend() below). The build rewrites BASE per site.
 const SITE = BASE.split('/')[1];

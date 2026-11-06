@@ -36,7 +36,7 @@ def internal_key(case):
 class Record(unittest.TestCase):
     def test_hash_verify_and_generations(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "family" / "mumtv.json"
+            path = Path(tmp) / "family" / "family1.json"
             rec = family.set_passphrase(path, PHRASE)
             self.assertNotIn(PHRASE, path.read_text(), "only a hash is stored")
             self.assertTrue(family.verify(rec, PHRASE))
@@ -88,19 +88,19 @@ class Record(unittest.TestCase):
     def test_sites(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            (d / "mumtv.site").write_text("TV_SITE=mumtv\nTV_BASE=/mumtv\nTV_PORT=8793\n")
+            (d / "family1.site").write_text("TV_SITE=family1\nTV_BASE=/family1\nTV_PORT=8793\n")
             (d / "bad.site").write_text("TV_SITE=Bad Name\nTV_PORT=1\n")
-            self.assertEqual(family.sites(d), [{"name": "mumtv", "base": "/mumtv", "port": 8793}])
+            self.assertEqual(family.sites(d), [{"name": "family1", "base": "/family1", "port": 8793}])
 
 
 class FamilySite(unittest.TestCase):
-    """The app as a family site: TV_AUTH=passphrase at /mumtv."""
+    """The app as a family site: TV_AUTH=passphrase at /family1."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         d = Path(self.tmp.name)
-        self.rec = d / "owner" / "family" / "mumtv.json"
-        server.S.settings = dataclasses.replace(settings(d), base="/mumtv", auth="passphrase", site="mumtv",
+        self.rec = d / "owner" / "family" / "family1.json"
+        server.S.settings = dataclasses.replace(settings(d), base="/family1", auth="passphrase", site="family1",
                                                 access_file=self.rec, classic=False)
         server.S.keys = Keys(d)
         server.S.access = family.Access(self.rec)
@@ -117,15 +117,15 @@ class FamilySite(unittest.TestCase):
     def test_not_set_up_yet(self):
         r = self.c.get("/tv/", headers=NGINX)
         self.assertEqual(r.status_code, 200)
-        self.assertIn('action="/mumtv/api/login"', r.text)
+        self.assertIn('action="/family1/api/login"', r.text)
         self.assertIn("isn’t ready yet", r.text)
-        self.assertEqual(self.login(PHRASE).headers["location"], "/mumtv/?e=3")
+        self.assertEqual(self.login(PHRASE).headers["location"], "/family1/?e=3")
 
     def test_signed_out_sees_only_the_passphrase_page(self):
         family.set_passphrase(self.rec, PHRASE)
         page = self.c.get("/tv/", headers=NGINX)
         self.assertIn('name="passphrase"', page.text)
-        self.assertIn("/mumtv/pwa/new/login.css", page.text)
+        self.assertIn("/family1/pwa/new/login.css", page.text)
         self.assertNotIn("isn’t ready", page.text)
         self.assertEqual(self.c.get("/tv/api/live", headers=NGINX).status_code, 401)
         self.assertEqual(self.c.get("/tv/new/static/js/app.js", headers=NGINX).status_code, 401)
@@ -135,12 +135,12 @@ class FamilySite(unittest.TestCase):
     def test_wrong_then_right_passphrase(self):
         family.set_passphrase(self.rec, PHRASE)
         bad = self.login("nope nope")
-        self.assertEqual((bad.status_code, bad.headers["location"]), (303, "/mumtv/?e=1"))
+        self.assertEqual((bad.status_code, bad.headers["location"]), (303, "/family1/?e=1"))
         self.assertNotIn(COOKIE, bad.cookies)
         good = self.login(PHRASE)
-        self.assertEqual((good.status_code, good.headers["location"]), (303, "/mumtv/"))
+        self.assertEqual((good.status_code, good.headers["location"]), (303, "/family1/"))
         cookie = good.headers["set-cookie"]
-        self.assertIn("Path=/mumtv/", cookie)
+        self.assertIn("Path=/family1/", cookie)
         self.assertIn("HttpOnly", cookie)
         self.assertIn("Secure", cookie)
         value = good.cookies[COOKIE]
@@ -158,13 +158,13 @@ class FamilySite(unittest.TestCase):
         family.set_passphrase(self.rec, PHRASE)
         for _ in range(5):
             self.login("wrong guess")
-        self.assertEqual(self.login(PHRASE).headers["location"], "/mumtv/?e=2", "even the right one waits")
+        self.assertEqual(self.login(PHRASE).headers["location"], "/family1/?e=2", "even the right one waits")
 
     def test_another_sites_form_cannot_sign_in(self):
         family.set_passphrase(self.rec, PHRASE)
         self.assertEqual(self.login(PHRASE, {"Origin": "https://evil.example"}).status_code, 403)
         # our own form, with the site's no-referrer policy: the browser says Origin: null
-        self.assertEqual(self.login(PHRASE, {"Origin": "null"}).headers["location"], "/mumtv/")
+        self.assertEqual(self.login(PHRASE, {"Origin": "null"}).headers["location"], "/family1/")
 
     def test_the_sidecar_and_iptv_need_the_internal_key(self):
         family.set_passphrase(self.rec, PHRASE)
@@ -184,7 +184,7 @@ class OwnersPanel(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         d = Path(self.tmp.name)
         (d / "fam").mkdir()
-        (d / "fam" / "mumtv.site").write_text("TV_SITE=mumtv\nTV_BASE=/mumtv\nTV_PORT=1\n".replace("TV_PORT=1", "TV_PORT=59999"))
+        (d / "fam" / "family1.site").write_text("TV_SITE=family1\nTV_BASE=/family1\nTV_PORT=1\n".replace("TV_PORT=1", "TV_PORT=59999"))
         server.S.settings = dataclasses.replace(settings(d), family_dir=d / "fam")
         import httpx
         server.S.http = httpx.AsyncClient()
@@ -198,18 +198,18 @@ class OwnersPanel(unittest.TestCase):
         r = self.c.get("/tv/api/family")
         self.assertEqual(r.status_code, 200)
         site = r.json()["sites"][0]
-        self.assertEqual((site["name"], site["base"], site["passphrase"], site["up"]), ("mumtv", "/mumtv", False, False))
-        self.assertEqual(self.c.post("/tv/api/family/mumtv/passphrase", content=json.dumps({"passphrase": "short"}), headers=WRITE).status_code, 400)
-        self.assertEqual(self.c.post("/tv/api/family/mumtv/passphrase", content=json.dumps({"passphrase": PHRASE}),
+        self.assertEqual((site["name"], site["base"], site["passphrase"], site["up"]), ("family1", "/family1", False, False))
+        self.assertEqual(self.c.post("/tv/api/family/family1/passphrase", content=json.dumps({"passphrase": "short"}), headers=WRITE).status_code, 400)
+        self.assertEqual(self.c.post("/tv/api/family/family1/passphrase", content=json.dumps({"passphrase": PHRASE}),
                                      headers={"Content-Type": "application/json"}).status_code, 403, "our page's header only")
-        self.assertEqual(self.c.post("/tv/api/family/joseph/passphrase", content=json.dumps({"passphrase": PHRASE}), headers=WRITE).status_code, 404)
-        ok = self.c.post("/tv/api/family/mumtv/passphrase", content=json.dumps({"passphrase": PHRASE}), headers=WRITE)
+        self.assertEqual(self.c.post("/tv/api/family/sam/passphrase", content=json.dumps({"passphrase": PHRASE}), headers=WRITE).status_code, 404)
+        ok = self.c.post("/tv/api/family/family1/passphrase", content=json.dumps({"passphrase": PHRASE}), headers=WRITE)
         self.assertEqual(ok.status_code, 200)
-        rec = family.read_record(self.d / "family" / "mumtv.json")
+        rec = family.read_record(self.d / "family" / "family1.json")
         self.assertTrue(family.verify(rec, PHRASE))
         gen = rec["gen"]
-        self.assertEqual(self.c.post("/tv/api/family/mumtv/signout", headers=WRITE).status_code, 200)
-        self.assertEqual(family.read_record(self.d / "family" / "mumtv.json")["gen"], gen + 1)
+        self.assertEqual(self.c.post("/tv/api/family/family1/signout", headers=WRITE).status_code, 200)
+        self.assertEqual(family.read_record(self.d / "family" / "family1.json")["gen"], gen + 1)
         self.assertTrue(self.c.get("/tv/api/family").json()["sites"][0]["passphrase"])
 
 
@@ -256,7 +256,7 @@ class Provider(unittest.TestCase):
         from tvapp import config as cfg
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            env = d / "mumtv.env"
+            env = d / "family1.env"
             env.write_text("IPTV_PROVIDER_TYPE=xtream\nXTREAM_BASE_URL=http://old.example.com\nXTREAM_USERNAME=a\nXTREAM_PASSWORD=b\n")
             with mock.patch.object(cfg, "CONFIG_PATH", env), \
                     mock.patch.dict(os.environ, {"STATE_DIRECTORY": str(d / "state"), "TV_AUTH": "passphrase"}):
@@ -266,7 +266,7 @@ class Provider(unittest.TestCase):
                 os.utime(env, (time.time() - 60, time.time() - 60))
                 s = cfg.load()
                 self.assertEqual((s.provider_source, s.provider_type, s.m3u_url), ("web", "m3u", "http://new.example.com/l.m3u"))
-                os.utime(env, None)                                   # `iptv family mumtv set-xtream` afterwards
+                os.utime(env, None)                                   # `iptv family family1 set-xtream` afterwards
                 os.utime(p, (time.time() - 60, time.time() - 60))
                 self.assertEqual((cfg.load().provider_source, cfg.load().xtream_base), ("file", "http://old.example.com"))
                 with mock.patch.dict(os.environ, {"TV_AUTH": ""}):
@@ -276,7 +276,7 @@ class Provider(unittest.TestCase):
     def test_internal_endpoint_is_loopback_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
-            server.S.settings = dataclasses.replace(settings(d), base="/mumtv", auth="passphrase", site="mumtv",
+            server.S.settings = dataclasses.replace(settings(d), base="/family1", auth="passphrase", site="family1",
                                                     access_file=d / "rec.json", classic=False)
             server.S.keys = Keys(d)
             server.S.access = family.Access(d / "rec.json")

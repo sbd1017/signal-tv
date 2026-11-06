@@ -5,8 +5,8 @@
     build_ui.py --base /tv      OUT     the live app, beside the classic interface: its own files under
                                         /tv/new/static (served by signal-tv from <ui_dir>/new), the
                                         sidecar under /tv/next/ (behind /tv's own login)
-    build_ui.py --base /mumtv   OUT     a family site (tvapp/family.py): as /tv, at its own address -
-                                        its API, files, video player and sidecar all under /mumtv/
+    build_ui.py --base /family1   OUT     a family site (tvapp/family.py): as /tv, at its own address -
+                                        its API, files, video player and sidecar all under /family1/
 
 The source (web-next/) is written for /tv-test. For /tv the build rewrites, in this order:
     NEXT = '/tv-test'  (api.js: the sidecar)   -> '/tv/next'

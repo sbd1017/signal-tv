@@ -1,5 +1,5 @@
 """Family sites: extra copies of the app for other households (each with its own provider, state and
-address, e.g. /mumtv), protected by one passphrase that the owner sets and changes - also remotely,
+address, e.g. /family1), protected by one passphrase that the owner sets and changes - also remotely,
 from the owner's own Settings page (Family sites).
 
 Pieces:

@@ -29,60 +29,60 @@ class FamilySh(unittest.TestCase):
         return subprocess.run(["bash", str(SCRIPT), *args], env=self.env, capture_output=True, text=True)
 
     def test_add_two_sites(self):
-        r = self.run_sh("add", "mumtv")
+        r = self.run_sh("add", "family1")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("family site mumtv", r.stdout)
-        self.assertEqual((self.t / "fam" / "mumtv.site").read_text(), "TV_SITE=mumtv\nTV_BASE=/mumtv\nTV_PORT=8793\n")
-        self.assertEqual(oct((self.t / "fam" / "mumtv.env").stat().st_mode & 0o777), "0o640", "the provider file is private")
-        snip = (self.t / "snippets" / "signal-tv-family-mumtv.conf").read_text()
-        self.assertIn("location ^~ /mumtv/ {", snip)
+        self.assertIn("family site family1", r.stdout)
+        self.assertEqual((self.t / "fam" / "family1.site").read_text(), "TV_SITE=family1\nTV_BASE=/family1\nTV_PORT=8793\n")
+        self.assertEqual(oct((self.t / "fam" / "family1.env").stat().st_mode & 0o777), "0o640", "the provider file is private")
+        snip = (self.t / "snippets" / "signal-tv-family-family1.conf").read_text()
+        self.assertIn("location ^~ /family1/ {", snip)
         self.assertIn("proxy_pass http://127.0.0.1:8793/tv/;", snip)
         self.assertNotIn("@NAME@", snip + "@PORT@")
         self.assertNotIn("basic-auth", snip, "the app's own passphrase page, no browser pop-up")
         self.assertIn("include snippets/signal-tv-family-*.conf;", (self.t / "snippets" / "signal-tv.conf").read_text())
         site = (self.t / "site.conf").read_text()
-        self.assertIn("POST:/mumtv/(api/(state(/import)?|login|logout)|next/api/art/gaps)$", site)
+        self.assertIn("POST:/family1/(api/(state(/import)?|login|logout)|next/api/art/gaps)$", site)
         self.assertIn("POST:/tv/api/(family/", site)
-        ui = self.t / "ui" / "signal-tv-ui-mumtv"
+        ui = self.t / "ui" / "signal-tv-ui-family1"
         self.assertTrue((ui / "new" / "index.html").is_file())
         self.assertEqual(os.readlink(ui / "default"), "new")
         self.assertTrue((self.t / "units" / "signal-tv-family@.service").is_file())
         # a second one gets the next port; the owner's map line isn't repeated
-        self.assertEqual(self.run_sh("add", "josephtv").returncode, 0)
-        self.assertIn("TV_PORT=8794", (self.t / "fam" / "josephtv.site").read_text())
+        self.assertEqual(self.run_sh("add", "family2").returncode, 0)
+        self.assertIn("TV_PORT=8794", (self.t / "fam" / "family2.site").read_text())
         self.assertEqual((self.t / "site.conf").read_text().count("POST:/tv/api/(family/"), 1)
         out = self.run_sh("list").stdout
-        self.assertIn("mumtv", out)
-        self.assertIn("josephtv", out)
+        self.assertIn("family1", out)
+        self.assertIn("family2", out)
 
     def test_remove(self):
-        self.assertEqual(self.run_sh("add", "mumtv").returncode, 0)
-        self.assertEqual(self.run_sh("add", "josephtv").returncode, 0)
+        self.assertEqual(self.run_sh("add", "family1").returncode, 0)
+        self.assertEqual(self.run_sh("add", "family2").returncode, 0)
         for d in ("fstate", "fcache"):
-            (self.t / d / "josephtv").mkdir()
+            (self.t / d / "family2").mkdir()
         (self.t / "owner" / "family").mkdir()
-        (self.t / "owner" / "family" / "josephtv.json").write_text("{}")
-        r = self.run_sh("remove", "josephtv")
+        (self.t / "owner" / "family" / "family2.json").write_text("{}")
+        r = self.run_sh("remove", "family2")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        gone = [self.t / "fam" / "josephtv.site", self.t / "fam" / "josephtv.env", self.t / "snippets" / "signal-tv-family-josephtv.conf",
-                self.t / "ui" / "signal-tv-ui-josephtv", self.t / "fstate" / "josephtv", self.t / "fcache" / "josephtv",
-                self.t / "owner" / "family" / "josephtv.json"]
+        gone = [self.t / "fam" / "family2.site", self.t / "fam" / "family2.env", self.t / "snippets" / "signal-tv-family-family2.conf",
+                self.t / "ui" / "signal-tv-ui-family2", self.t / "fstate" / "family2", self.t / "fcache" / "family2",
+                self.t / "owner" / "family" / "family2.json"]
         self.assertEqual([str(p) for p in gone if p.exists()], [])
         site = (self.t / "site.conf").read_text()
-        self.assertNotIn("/josephtv/", site)
-        self.assertIn("POST:/mumtv/", site, "the other site stays")
+        self.assertNotIn("/family2/", site)
+        self.assertIn("POST:/family1/", site, "the other site stays")
         self.assertIn("POST:/tv/api/(family/", site)
-        self.assertTrue((self.t / "snippets" / "signal-tv-family-mumtv.conf").exists())
-        self.assertNotIn("josephtv", self.run_sh("list").stdout)
-        self.assertNotEqual(self.run_sh("remove", "josephtv").returncode, 0, "gone already")
+        self.assertTrue((self.t / "snippets" / "signal-tv-family-family1.conf").exists())
+        self.assertNotIn("family2", self.run_sh("list").stdout)
+        self.assertNotEqual(self.run_sh("remove", "family2").returncode, 0, "gone already")
 
     def test_refusals(self):
         self.assertNotEqual(self.run_sh("add", "Mum TV").returncode, 0)
         self.assertNotEqual(self.run_sh("add", "tv-test").returncode, 0, "reserved")
         (self.t / "sites" / "site.conf").write_text("location /photos/ { }\n")
         self.assertIn("already used", self.run_sh("add", "photos").stdout)
-        self.assertEqual(self.run_sh("add", "mumtv").returncode, 0)
-        self.assertIn("exists already", self.run_sh("add", "mumtv").stdout)
+        self.assertEqual(self.run_sh("add", "family1").returncode, 0)
+        self.assertIn("exists already", self.run_sh("add", "family1").stdout)
 
 
 if __name__ == "__main__":

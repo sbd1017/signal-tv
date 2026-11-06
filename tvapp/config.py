@@ -81,7 +81,7 @@ def system_timezone() -> str:
 
 
 def _base(value: str) -> str:
-    """'/mumtv' - one path segment, lower case; anything else falls back to /tv."""
+    """'/family1' - one path segment, lower case; anything else falls back to /tv."""
     v = "/" + value.strip().strip("/")
     return v if re.fullmatch(r"/[a-z0-9][a-z0-9-]{0,30}", v) else "/tv"
 
@@ -125,7 +125,7 @@ class Settings:
     # site: one passphrase, checked here, set by the owner - tvapp/family.py).
     base: str = "/tv"
     auth: str = "nginx"
-    site: str = ""                          # a family site's name ("mumtv"); "" for the owner's own
+    site: str = ""                          # a family site's name ("family1"); "" for the owner's own
     access_file: Path | None = None          # the family site's passphrase record (written by the owner's app)
     classic: bool = True                     # offer the classic interface (needs the /tv base: not on family sites)
     family_dir: Path = Path("/etc/signal-tv-family")   # the owner's app: <site>.site files describing each family site
