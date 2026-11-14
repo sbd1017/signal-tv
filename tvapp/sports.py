@@ -27,6 +27,8 @@ import re
 import time
 import unicodedata
 
+from . import country_names
+
 # ------------------------------------------------------------------ sports
 FOOTBALL, BASKETBALL, F1, MMA, BOXING, NFL, TENNIS, CRICKET, RUGBY, HOCKEY, HANDBALL, VOLLEYBALL, OTHER = range(1, 14)
 SPORT_KEYS = {FOOTBALL: "football", BASKETBALL: "basketball", F1: "f1", MMA: "mma", BOXING: "boxing", NFL: "nfl",
@@ -817,7 +819,7 @@ for _e in ENTITIES:
         if _k in BY_ID_KEY:
             raise ValueError(f"sports DATA: id {_k} used twice")
         BY_ID_KEY[_k] = _e
-for _k, _names in GREEK_NAMES.items():
+for _k, _names in (*GREEK_NAMES.items(), *country_names.NAMES.items()):
     _e = BY_ID_KEY[f"team:{_k}"]
     _e.names = list(dict.fromkeys(_e.names + [norm(n) for n in _names.split("|") if norm(n)]))
 STRONG: dict[str, list[int]] = {}          # phrase -> entities (a phrase can only be strong for one)
