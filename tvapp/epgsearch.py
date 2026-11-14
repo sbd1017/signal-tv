@@ -218,6 +218,14 @@ class Index:
             for e in (*info.teams, info.comp):
                 if e >= 0:
                     ents.setdefault(e, []).append(rec)
+        # Channels that mark their live matches (LIVE, "(Ζ)", "LIVE From ..."): at least two marked in the guide.
+        # On these an unmarked match is a replay - Greek and South African channels re-air last month's games
+        # titled like the live ones.
+        marked: Counter = Counter()
+        for rec in self.sport_recs:
+            if self.sp_kind[rec] == sports.MATCH and self.sp_flags[rec] & LIVE_TAG:
+                marked.update(set(occ_ch[first[rec]:first[rec + 1]]))
+        self.marks_live = {ch for ch, n in marked.items() if n >= 2}
         self.ent_recs = {e: array("I", v) for e, v in ents.items()}
         self.key_recs = {k: array("I", v) for k, v in key_recs.items()}     # event key -> its matches / events
         self._info: dict[int, dict] = {}            # event_info cache (sport programmes only: bounded)
@@ -555,7 +563,8 @@ class Index:
         old_date = bool(dated) and all(d < air_day - 1 for d in dated)     # "HULL CITY - EVERTON 11/10/26" on the 13th
         # a broadcaster saying LIVE wins over the guess from earlier airings (which can be previews or
         # a guide's other source with the wrong time)
-        replay = (earlier or old_date or all(self.sp_flags[r] & REPLAY for r in recs)) and not flags & LIVE_TAG
+        unmarked = self.sp_kind[best] == sports.MATCH and all(r[2] in self.marks_live for r in rows)
+        replay = (earlier or old_date or unmarked or all(self.sp_flags[r] & REPLAY for r in recs)) and not flags & LIVE_TAG
         known = (self.sp_a[best] >= 0) + (self.sp_b[best] >= 0)
         prio = sports.ENTITIES[comp].priority if comp >= 0 else 0
         score = prio + 12 * known + min(len(ids), 15) + 5 * bool(flags & LIVE_TAG) - 40 * replay - 25 * bool(flags & YOUTH)

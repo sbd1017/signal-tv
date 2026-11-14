@@ -257,3 +257,32 @@ class ShortNames(unittest.TestCase):
         self.assertEqual(len(matches), 1, [e["title"] for e in evs])
         self.assertEqual(sorted(matches[0]["ids"]), ["l_a", "l_b"])
         self.assertFalse(any("P02" in e["title"] for e in evs), "a feed code is no match")
+
+
+class LiveMarks(unittest.TestCase):
+    def test_a_channel_that_marks_its_live_matches_airs_the_unmarked_ones_as_replays(self):
+        """Nova Sports marks live games "(Ζ)" and SuperSport says "LIVE From ...": last month's
+        Hungary - Ukraine at 14:00 without the mark is a replay. A channel that never marks says nothing."""
+        guide = {"l_nova": [row(-0.5, 2, "Ουγγαρία - Ουκρανία : UEFA Nations League 2026/27"),
+                            row(2, 2, "Νορβηγία - Ουαλία (Ζ) : UEFA Nations League 2026/27"),
+                            row(5, 2, "Πορτογαλία - Δανία (Ζ) : UEFA Nations League 2026/27")],
+                 "l_ss": [row(-0.5, 2, "AFCON Qualifier '27: RSA v KEN", "'Africa Cup Of Nations Qualifier - South Africa vs Kenya'. From Soweto."),
+                          row(2, 2, "WSL 26/27: Chelsea v Man City", "'Women's Super League'. LIVE From Stamford Bridge - London."),
+                          row(5, 2, "PSL 26/27: Chiefs v Pirates", "'Betway Premiership'. LIVE From FNB Stadium.")],
+                 "l_plain": [row(-0.5, 2, "Czechia vs Spain - UEFA Nations League"),
+                             row(2, 2, "Georgia vs Hungary - UEFA Nations League")]}
+        chs = {"l_nova": sports.FOOTBALL, "l_ss": sports.FOOTBALL, "l_plain": sports.FOOTBALL}
+        evs = {e["title"]: e for e in epgsearch.Index(guide, NOW, channel_sport=chs).sports(NOW, NOW - 6 * H, NOW + 24 * H)
+               if e["kind"] == "match"}
+        replay = {t: e["replay"] for t, e in evs.items()}
+        self.assertTrue(replay["Hungary vs Ukraine"], replay)
+        self.assertTrue(next(r for t, r in replay.items() if "RSA" in t or "South Africa" in t), replay)
+        self.assertFalse(next(r for t, r in replay.items() if "Chelsea" in t), replay)
+        self.assertFalse(next(r for t, r in replay.items() if "Norway" in t or "Νορβηγία" in t), replay)
+        self.assertFalse(next(r for t, r in replay.items() if "Czechia" in t), "no marks on that channel: no verdict")
+
+    def test_live_marks(self):
+        self.assertTrue(sports.classify("Νορβηγία - Ουαλία (Ζ) : UEFA Nations League", "", sports.FOOTBALL).live)
+        self.assertTrue(sports.classify("Chelsea v Man City", "LIVE From Stamford Bridge.", sports.FOOTBALL).live)
+        self.assertFalse(sports.classify("Chelsea v Man City", "Recorded live from Stamford Bridge.", sports.FOOTBALL).live)
+        self.assertFalse(sports.classify("Chelsea v Man City", "", sports.FOOTBALL).live)

@@ -208,16 +208,20 @@ async def art_index(ids: str = "", names: str = "", guests: str = ""):
                         headers={"Cache-Control": "no-store"})
 
 
+FIXTURE_SPORTS = {"football": sports.FOOTBALL, "basketball": sports.BASKETBALL, "nfl": sports.NFL}
+
+
 @route("GET", "/api/fixtures")
 async def fixtures_index(q: str = ""):
-    """Live or replay, from the real fixture dates (tvnext/fixtures.py). q: "home|away|start" items,
-    comma-separated, team ids as the Sports API gives them; at most 80. Answers what is known now
-    and queues the rest; "pending" says how many lookups are still waiting."""
+    """Live or replay, from the real fixture dates (tvnext/fixtures.py). q: "home|away|start[|sport]" items,
+    comma-separated, team ids as the Sports API gives them, its sport key; at most 80. Answers what is known
+    now (keyed "home|away|start") and queues the rest; "pending" says how many lookups are still waiting."""
     items = []
     for part in q.split(",")[:80]:
         bits = part.split("|")
-        if len(bits) == 3 and ID.match(bits[0]) and ID.match(bits[1]) and bits[2].isdigit() and bits[0].startswith("team:"):
-            items.append((bits[0], bits[1], int(bits[2])))
+        if len(bits) in (3, 4) and ID.match(bits[0]) and ID.match(bits[1]) and bits[2].isdigit() and bits[0].startswith("team:"):
+            sport = FIXTURE_SPORTS.get(bits[3], 0) if len(bits) == 4 else 0
+            items.append((bits[0], bits[1], int(bits[2]), sport))
     if config.ART_MODE == "remote":
         return JSONResponse({"items": {}, "pending": 0}, headers={"Cache-Control": "no-store"})
     found, pending = S.fix.ask(items)

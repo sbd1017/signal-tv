@@ -605,6 +605,14 @@ class Fixtures(unittest.TestCase):
         self.assertIsNone(v([S - 30 * 86400], S), "a meeting a month ago says nothing about today")
         self.assertIsNone(v([], S))
         self.assertEqual(v([sat, S + 10 * 60], S), {"live": True}, "the real one today wins")
+        # no meeting listed near it, but a side playing someone else that evening: not live
+        busy = {"replay": True, "played": 0, "busy": True}
+        self.assertEqual(v([], S, others=[S + 3 * 3600]), busy, "Hungary in Georgia at 17:00, Hungary - Ukraine aired at 14:00")
+        self.assertEqual(v([], S, others=[S - 20 * 3600]), busy, "played someone else last night")
+        self.assertIsNone(v([], S, others=[S + 3 * 86400]), "a game days away says nothing")
+        self.assertEqual(v([S + 10 * 60], S, others=[S + 3 * 3600]), {"live": True}, "the meeting itself listed wins")
+        self.assertEqual(v([sat], S, others=[S + 3 * 3600]), {"replay": True, "played": sat}, "an earlier meeting gives the date")
+        self.assertIsNone(v([], S, others=[S + 20 * 3600], busy=12 * 3600), "NBA sides play on consecutive nights")
 
     def test_ask_queues_then_answers_from_cache(self):
         class Src:
@@ -677,6 +685,35 @@ class Fixtures(unittest.TestCase):
             # the same pair at another time that day: the boards already fetched serve it
             asyncio.run(fx.lookup(*item[:2], airing + 3600))
             self.assertEqual(len(c.urls), 16)
+
+
+    def test_a_side_busy_elsewhere(self):
+        """Hungary - Ukraine re-aired at 14:00 on the day Hungary play in Georgia (17:00) and Ukraine in Belfast:
+        ESPN lists no meeting near it, but both sides' other games."""
+        airing = int(datetime(2026, 11, 14, 14, 0, tzinfo=timezone.utc).timestamp())
+        def game(date, home, away):
+            return {"uid": "s:600~l:2395~e:1", "date": date, "status": {"type": {"state": "pre"}},
+                    "competitions": [{"competitors": [{"team": {"displayName": home}}, {"team": {"displayName": away}}]}]}
+        board = [game("2026-11-14T17:00Z", "Georgia", "Hungary"), game("2026-11-14T19:45Z", "Northern Ireland", "Ukraine")]
+
+        class Client:
+            async def get(self, url, params=None, headers=None, timeout=None):
+                return SimpleNamespace(status_code=200, json=lambda: {"events": board if params["dates"] == "20261114" else []})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = fixtures.Fixtures(sportsart.Library(Path(tmp) / "art"), None, Path(tmp) / "fixtures.json", Client())
+            item = ("team:hungary", "team:ukraine", airing, 1)     # national sides: the card says football
+            fx.ask([item])
+
+            async def work():
+                task = asyncio.create_task(fx.run())
+                while fx.q.qsize() or fx.queued:
+                    await asyncio.sleep(0.01)
+                task.cancel()
+            asyncio.run(work())
+            self.assertEqual(fx.ask([item])[0], {f"team:hungary|team:ukraine|{airing}": {"replay": True, "played": 0, "busy": True}})
+            later = int(datetime(2026, 11, 14, 19, 45, tzinfo=timezone.utc).timestamp())
+            self.assertEqual(fx.ask([("team:northern-ireland", "team:ukraine", later)])[1], 1, "the real game: looked up on its own")
 
 
 class Scores(unittest.TestCase):

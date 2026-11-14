@@ -7,6 +7,8 @@ football game it lists that day; the NBA's and the NFL's) give the kick-off of t
 
 - a kick-off from 30 minutes before the airing to 90 minutes after it: the airing is the match, live;
 - only kick-offs well before it (2.5 h or more, within the last 14 days): a replay, played then;
+- no meeting near it but either team playing someone else close to it (Hungary's game in Georgia that
+  evening): a replay too, date unknown unless an earlier meeting is listed - a side doesn't play twice in a day;
 - anything else (no record, a fixture further away): no verdict, the guide's own reading stands.
 
 The meeting's competition comes with it, for a listing whose guide never says ("UNION SG - REAL
@@ -39,21 +41,31 @@ REPLAY_GAP, REPLAY_WINDOW = int(2.5 * 3600), 14 * 86400
 GAPS = {sports.FOOTBALL: 100 * 60, sports.BASKETBALL: 150 * 60, sports.NFL: 200 * 60}
 BOARDS = {sports.FOOTBALL: scores.ALL_FOOTBALL, sports.BASKETBALL: "basketball/nba", sports.NFL: "football/nfl"}
 DAY_TTL, OLD_DAY_TTL = 3600, 12 * 3600
+# a game against another side this close to the airing rules the airing out as live (NBA sides play on consecutive nights)
+BUSY = {sports.FOOTBALL: 30 * 3600, sports.BASKETBALL: 12 * 3600, sports.NFL: 3 * 86400}
+FLUSH_EVERY = 600
 
 
-def meeting(kickoffs: list[int], start: int, gap: int = REPLAY_GAP) -> tuple[dict, int] | None:
-    """(verdict, the kick-off it rests on) or None."""
+def meeting(kickoffs: list[int], start: int, gap: int = REPLAY_GAP, others: list[int] = (),
+            busy: int = BUSY[sports.FOOTBALL]) -> tuple[dict, int] | None:
+    """(verdict, the kick-off it rests on: 0 when it rests on the other games) or None. others: kick-offs of
+    either team's games against someone else."""
     live = [k for k in kickoffs if start - LIVE_BEFORE <= k <= start + LIVE_AFTER]
     if live:
         return {"live": True}, live[0]
     past = [k for k in kickoffs if start - REPLAY_WINDOW <= k <= start - gap]
-    if past and not any(start - gap < k < start + LIVE_AFTER for k in kickoffs):
+    if any(start - gap < k < start + LIVE_AFTER for k in kickoffs):
+        return None
+    if past:
         return {"replay": True, "played": max(past)}, max(past)
+    if any(abs(k - start) < busy for k in others):
+        return {"replay": True, "played": 0, "busy": True}, 0
     return None
 
 
-def verdict(kickoffs: list[int], start: int, gap: int = REPLAY_GAP) -> dict | None:
-    m = meeting(kickoffs, start, gap)
+def verdict(kickoffs: list[int], start: int, gap: int = REPLAY_GAP, others: list[int] = (),
+            busy: int = BUSY[sports.FOOTBALL]) -> dict | None:
+    m = meeting(kickoffs, start, gap, others, busy)
     return m[0] if m else None
 
 
@@ -71,9 +83,10 @@ class Fixtures:
         # "team:a|team:b" -> {"t": checked, "k": [kick-offs], "c": {kick-off: competition}, "w": [from, to] covered}
         self.cache: dict[str, dict] = {}
         self.boards: dict[tuple[str, str], tuple[float, list]] = {}
-        self.q: asyncio.Queue[tuple[str, int]] = asyncio.Queue()
+        self.q: asyncio.Queue[tuple[str, int, int]] = asyncio.Queue()
         self.queued: set[str] = set()
         self.dirty = False
+        self.flushed = time.time()
         try:
             self.cache = json.loads(path.read_text())
         except (FileNotFoundError, ValueError):
@@ -95,21 +108,23 @@ class Fixtures:
         c = self.cache.get(p)
         w = (c or {}).get("w") or (0, 0)
         # the days looked at must cover this airing's window (a day's slack at the far end)
-        if c and time.time() - c["t"] < (TTL if c["k"] else MISS_TTL) and w[0] <= start - REPLAY_WINDOW + 86400 \
-                and start + LIVE_AFTER <= w[1]:
+        if c and "o" in c and time.time() - c["t"] < (TTL if c["k"] or c["o"] else MISS_TTL) \
+                and w[0] <= start - REPLAY_WINDOW + 86400 and start + LIVE_AFTER <= w[1]:
             return c
         return None
 
-    def ask(self, items: list[tuple[str, str, int]]) -> tuple[dict, int]:
-        """{"a|b|start": verdict} for what is known; the rest is queued. items: (home, away, start).
+    def ask(self, items: list[tuple]) -> tuple[dict, int]:
+        """{"a|b|start": verdict} for what is known; the rest is queued. items: (home, away, start[, sport]): the
+        card's sport, needed for national sides (one team id for every sport); else the team's own.
         A verdict may carry the meeting's competition: "comp" (id) and "comp_name"."""
         out = {}
-        for a, b, start in items:
+        for a, b, start, *rest in items:
             p = self.pair(a, b)
+            ent = sports.BY_ID_KEY.get(a)
+            sport = (rest[0] if rest else 0) or (ent.sport if ent else 0)
             c = self.fresh(p, start)
             if c:
-                ent = sports.BY_ID_KEY.get(a)
-                m = meeting(c["k"], start, GAPS.get(ent.sport if ent else 0, REPLAY_GAP))
+                m = meeting(c["k"], start, GAPS.get(sport, REPLAY_GAP), c["o"], BUSY.get(sport, BUSY[sports.FOOTBALL]))
                 if m:
                     v, kick = m
                     comp = (c.get("c") or {}).get(str(kick), "")
@@ -118,7 +133,7 @@ class Fixtures:
                     out[f"{a}|{b}|{start}"] = v
             elif p not in self.queued and self.name(a) and self.name(b):
                 self.queued.add(p)
-                self.q.put_nowait((p, start))
+                self.q.put_nowait((p, start, sport))
         return out, self.q.qsize()
 
     async def board(self, path: str, day: str) -> list:
@@ -143,18 +158,19 @@ class Fixtures:
                 del self.boards[k]
         return parsed
 
-    async def espn(self, a: str, b: str, start: int) -> dict[int, str]:
-        """Kick-off -> competition of every meeting of a and b ESPN lists around this airing."""
-        ent = sports.BY_ID_KEY.get(a)
-        path = BOARDS.get(ent.sport if ent else 0)
+    async def espn(self, a: str, b: str, start: int, sport: int) -> tuple[dict[int, str], list[int]]:
+        """(kick-off -> competition of every meeting of a and b ESPN lists around this airing,
+        kick-offs of either one's games against another side)."""
+        path = BOARDS.get(sport)
         if not path or not self.client:
-            return {}
-        found = {}
+            return {}, []
+        found, others = {}, set()
         for board in await asyncio.gather(*(self.board(path, day) for day in days(start))):
             got = scores.find(board, a, b)
             if got:
                 found[got[0]["start"]] = got[0]["comp"]
-        return found
+            others.update(g["start"] for g in board if len({a, b} & set(g["sides"])) == 1)
+        return found, sorted(others)
 
     async def tsdb(self, a: str, b: str) -> list[int]:
         found: set[int] = set()
@@ -171,30 +187,31 @@ class Fixtures:
                     pass
         return sorted(found)
 
-    async def lookup(self, a: str, b: str, start: int) -> dict:
-        met = await self.espn(a, b, start)
+    async def lookup(self, a: str, b: str, start: int, sport: int = 0) -> dict:
+        ent = sports.BY_ID_KEY.get(a)
+        met, others = await self.espn(a, b, start, sport or (ent.sport if ent else 0))
         kicks = sorted(met)
         if not kicks and self.src:
             try:
                 kicks = await self.tsdb(a, b)
             except (httpx.HTTPError, ValueError) as e:
                 log.info("fixtures: TheSportsDB %s|%s: %s", a, b, e.__class__.__name__)
-        return {"t": time.time(), "k": kicks, "c": {str(k): c for k, c in met.items() if c},
+        return {"t": time.time(), "k": kicks, "o": others, "c": {str(k): c for k, c in met.items() if c},
                 "w": [start - REPLAY_WINDOW, start + 86400]}
 
     async def run(self):
         while True:
-            p, start = await self.q.get()
+            p, start, sport = await self.q.get()
             try:
                 a, b = p.split("|")
-                self.cache[p] = await self.lookup(a, b, start)
+                self.cache[p] = await self.lookup(a, b, start, sport)
                 self.dirty = True
             except (httpx.HTTPError, ValueError) as e:
-                self.cache[p] = {"t": time.time() - MISS_TTL + 1800, "k": [], "w": [start - REPLAY_WINDOW, start + 86400]}
+                self.cache[p] = {"t": time.time() - MISS_TTL + 1800, "k": [], "o": [], "w": [start - REPLAY_WINDOW, start + 86400]}
                 log.info("fixtures: %s: %s", p, e.__class__.__name__)       # a failed lookup: try again in 30 min
             finally:
                 self.queued.discard(p)
-                if self.q.empty():
+                if self.q.empty() or time.time() - self.flushed > FLUSH_EVERY:      # a queue that never empties too
                     self.flush()
 
     def flush(self):
@@ -205,3 +222,4 @@ class Fixtures:
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.cache, separators=(",", ":")))
         tmp.replace(self.path)
+        self.dirty, self.flushed = False, time.time()

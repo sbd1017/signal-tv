@@ -850,6 +850,7 @@ const fxKey = (ev) => (FX_SPORTS.has(ev.sport) && (ev.teams || []).length === 2 
 async function loadFixtures(evs) {
   const now = Date.now();
   const rank = { live: 0, soon: 1, later: 2 };
+  const sportOf = new Map(evs.map((e) => [fxKey(e), e.sport]));          // national sides need the card's sport
   const want = [...new Set(evs.filter((e) => e.when in rank).sort((a, b) => rank[a.when] - rank[b.when]).map(fxKey))]
     .filter((k) => k && !fixtureIdx.has(k) && now - (fixtureAsked.get(k) || 0) > 20000);
   let found = false;
@@ -858,7 +859,8 @@ async function loadFixtures(evs) {
     const part = want.slice(i, i + 80);
     for (const k of part) fixtureAsked.set(k, now);
     try {
-      const res = await fetch(`${NEXT}/api/fixtures?${new URLSearchParams({ q: part.join(',') })}`, { credentials: 'same-origin' });
+      const q = part.map((k) => `${k}|${sportOf.get(k)}`).join(',');
+      const res = await fetch(`${NEXT}/api/fixtures?${new URLSearchParams({ q })}`, { credentials: 'same-origin' });
       const d = res.ok ? await res.json() : { items: {}, pending: 0 };
       for (const [k, v] of Object.entries(d.items || {})) { fixtureIdx.set(k, v); found = true; }
       pending = d.pending || 0;
@@ -872,8 +874,9 @@ function withFixture(ev) {
   const r = scoreReplays.get(`${ev.title}|${ev.start}`);
   if (r) return { ...ev, replay: true, played: r.played };
   const v = fixtureIdx.get(fxKey(ev));
-  // a meeting in another competition is another game ("Retro EFL Cup 09" is not last week's league match)
-  if (!v || (ev.comp_id && v.comp && v.comp !== ev.comp_id)) return ev;
+  // a meeting in another competition is another game ("Retro EFL Cup 09" is not last week's league match);
+  // a first team busy elsewhere says nothing about its youth or women's side
+  if (!v || (ev.comp_id && v.comp && v.comp !== ev.comp_id) || (v.busy && (ev.youth || ev.women))) return ev;
   const comp = !ev.comp && v.comp ? { comp: v.comp_name, comp_id: v.comp } : {};
   return v.replay ? { ...ev, ...comp, replay: true, played: v.played } : { ...ev, ...comp, replay: false, played: 0 };
 }
@@ -1258,7 +1261,9 @@ async function viewSports() {
       const t = known(sideIds[i]);
       const flag = fl[i] || (t && t.national ? flags.flagCode(t.name) : '');   // a known national side on its own counts too
       const g = sideIds[i] ? '' : guestIdx.get(`${ev.sport}|${label}`) || '';       // looked up by name on the Pi
-      return { label, id: sideIds[i], art: sideIds[i] || (g && hasArt(g) ? g : ''), guest: g, crest: art.crest(sideIds[i], label), flag, national: !!(t && t.national) };
+      // national sides in English ("Noruega" -> Norway, by the known team or the country); clubs keep the guide's spelling
+      const shown = t && t.national ? t.name : (fl[i] && flags.englishName(label)) || label;
+      return { label: shown, id: sideIds[i], art: sideIds[i] || (g && hasArt(g) ? g : ''), guest: g, crest: art.crest(sideIds[i], label), flag, national: !!(t && t.national) };
     });
   }
 

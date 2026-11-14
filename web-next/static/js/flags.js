@@ -50,6 +50,32 @@ export function flagCode(label) {
   return (k && names().get(k)) || '';
 }
 
+let EN = null;                                  // code -> English name; folded English names
+function english() {
+  if (EN) return EN;
+  EN = { byCode: new Map(), names: new Set() };
+  let dn = null;
+  try { dn = new Intl.DisplayNames(['en'], { type: 'region' }); } catch { /* no names: labels stay as written */ }
+  for (const code of CODES) {
+    try { const n = dn && dn.of(code.toUpperCase()); if (n && n !== code.toUpperCase()) { EN.byCode.set(code, n); EN.names.add(fold(n)); } } catch { /* not a region */ }
+  }
+  for (const [code, list] of Object.entries(EXTRA)) {
+    const all = list.split('|');
+    if (!EN.byCode.has(code)) EN.byCode.set(code, all[0]);
+    for (const n of all) EN.names.add(fold(n));
+  }
+  return EN;
+}
+
+// A country written in another language, as English: 'Noruega' -> 'Norway', 'Ισπανία' -> 'Spain'. '' when the
+// label is already English, carries more than the country ("Australia (W)", "España U21") or isn't one.
+export function englishName(label) {
+  const f = fold(label);
+  const code = f && f === bare(label) ? names().get(f) : '';
+  if (!code || english().names.has(f)) return '';
+  return english().byCode.get(code) || '';
+}
+
 // both sides of a match, only when both are countries ("Georgia vs Alabama" is college football)
 export function pairFlags(labels) {
   const codes = labels.map(flagCode);

@@ -669,6 +669,10 @@ _NOT_A_SIDE = re.compile(r"^(race|heat|stage|leg|round|session|practice|qualifyi
                          r"|^[a-z]{1,3} ?\d{1,3}( extra| hd| sd)?$")     # a channel or feed code: "P02 - L2 EXTRA" is no match
 _STAGE = re.compile(r"(?:\d+(?:st|nd|rd|th)\s+(?:test|odi|t20i?|one-day international)|(?:first|second|third|fourth|fifth)\s+test)\s*[:\-–]?\s+", re.I)
 _LEADLIVE = re.compile(r"^\s*(?:live|en vivo|en directo|ao vivo|en direct|direct|diretta)\b\s*[:!|-]?\s*", re.I)
+# a live marker in brackets anywhere in the title ("Νορβηγία - Ουαλία (Ζ)": ζωντανά), or a description saying where
+# the match is live from ("LIVE From Stamford Bridge"; not "recorded live from")
+_LIVE_MARK = re.compile(r"\((?:ζ|live|en vivo|en directo|ao vivo|direct|diretta|uživo|uzivo)\)", re.I)
+_LIVE_FROM = re.compile(r"(?<!recorded )\blive (?:from|at)\b", re.I)
 
 
 def _phrases(text: str) -> list[str]:
@@ -1112,7 +1116,8 @@ def classify(title: str, desc: str, channel_sport: int = 0) -> Info | None:
         years = [int(y) for y in _YEAR.findall(title)]
         if years and max(years) < time.gmtime().tm_year:
             info.dated = max(years) * 10000 + 1231
-    info.live = bool(_LEADLIVE.match(title)) or has_any(tw[:2], _LIVE)
+    info.live = bool(_LEADLIVE.match(title)) or has_any(tw[:2], _LIVE) or bool(_LIVE_MARK.search(title)) \
+        or bool(desc) and bool(_LIVE_FROM.search(desc[:300]))
     show = has_any(tw, _SHOW)
     term = sport_word(tw)
     ents = scan(tw)

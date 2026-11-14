@@ -92,8 +92,8 @@ def words(name: str) -> frozenset:
 
 
 def parse_board(data: dict, sport: int) -> list[dict]:
-    """A scoreboard -> [{"ids": {team id: score}, "names": [(name words, score)] x2, "clock", "state", "detail", "start",
-    "comp": our competition id or ""}]."""
+    """A scoreboard -> [{"ids": {team id: score}, "sides": [team ids we know, either side], "names": [(name words, score)] x2,
+    "clock", "state", "detail", "start", "comp": our competition id or ""}]."""
     out = []
     for ev in (data or {}).get("events") or []:
         try:
@@ -111,7 +111,7 @@ def parse_board(data: dict, sport: int) -> list[dict]:
             typ = st.get("type") or {}
             start = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).timestamp()
             league = _LEAGUE.search(f"{ev.get('uid') or ''}~")
-            out.append({"ids": ids if len(ids) == 2 else {}, "names": names, "clock": st.get("displayClock") or "",
+            out.append({"ids": ids if len(ids) == 2 else {}, "sides": list(ids), "names": names, "clock": st.get("displayClock") or "",
                         "state": typ.get("state") or "", "detail": typ.get("shortDetail") or typ.get("detail") or "", "start": int(start),
                         "comp": LEAGUES.get(int(league.group(1)), "") if league else ""})
         except (KeyError, IndexError, ValueError, TypeError):
