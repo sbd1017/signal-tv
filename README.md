@@ -45,12 +45,14 @@ classics). Image credits: [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS
   previous channel, and a mini player that keeps the channel going while you browse. **Also showing**
   lists the other channels with the same match or programme. A "live" channel that turns out to be a
   short recording on repeat is stopped with a plain message and left out for a few hours.
-- **Sports**: the day's matches from the guide as one card each, whatever each broadcaster calls them,
-  with team crests, competition logos and the competition under the teams. Live scores and the match
+- **Sports**: the day's matches from the guide as one card each, whatever each broadcaster calls them and in
+  whatever language ("Noruega", "Ουγγαρία" and "Portugalska" are Norway, Hungary and Portugal), with team crests, competition logos and the competition under the teams. Live scores and the match
   clock come from ESPN's public scoreboards (each device can hide them), and Live now leads with the
   biggest match. The best feed for your device comes first: smooth playback, then picture quality,
   with English or international broadcasters first if you choose. The others are a tap away. Replays
-  are marked with the day they were played. Favourite teams and competitions get their own For You tab,
+  are marked even when the guide doesn't say so: from the real fixture dates, a channel that marks its live
+  games leaving the replays unmarked, or a team playing someone else that day. Where it's known, the day
+  each replay was played is shown. Favourite teams and competitions get their own For You tab,
   with optional alerts before kick-off.
 - **Films and series** with posters, details, resume, mark as watched, next episode and an episode
   filter. When the provider has the same title in several languages, the page lists them, and shows
