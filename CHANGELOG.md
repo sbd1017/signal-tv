@@ -2,6 +2,17 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.17.0 - 2026-11-14
+
+- Live on a wide screen: the wheel scrolls the channel list only with the pointer over it, not over the pinned player beside it (anything in the player's column that scrolls on its own still does)
+- Security (S-08, S-11): family sign-in slows down instead of locking out; backup never follows planted symlinks
+- Security: pillow 13.0.0 (sidecar image handling) and certifi 2026.10.23
+- Public export: lower-case rename too
+- Public export: rename other households' site names; refuse EXIF in images and unlisted top-level paths (G-02, G-04)
+- Sports: replays shown as live caught two more ways - a channel that marks its live games ('(Ζ)', 'LIVE From ...') airs the unmarked ones as replays, and a side ESPN lists against someone else near the airing isn't playing this one live; national sides are now looked up on ESPN at all (the card's sport is sent: their team id has none); the fixtures cache is saved every 10 minutes even when lookups never stop; countries shown in English ('Noruega' -> Norway)
+- Sports: national teams in every guide language the browser knows (Noruega, Portugalska, Hungria, Dinamarca...), so their cards join up, get crests and are checked against ESPN; names another team or a longer name uses are left out (Island, as in Rhode Island)
+- Public README: replays found without the guide saying so; countries in any language
+
 ## v1.16.0 - 2026-11-03
 
 - Public README: Also showing, recordings caught, live scores, how the best feed is picked, Library grid pages, start-up times, backup provider, per-device layout, other households; Pi steps now include tv-keys.sh and how to swap the site-wide login for Basic Auth
