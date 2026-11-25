@@ -226,7 +226,7 @@ class Catalogue:
         t0 = time.time()
         try:
             path = await providers._download(self.http, url, {"User-Agent": self.s.user_agent}, "epg")
-            data = await asyncio.to_thread(parse_xmltv, path, self.data["live"])
+            data = await asyncio.to_thread(parse_xmltv, path, self.data["live"], self.data["cats"]["live"])
             self.guide.data, self.guide.updated, self.guide.error = data, time.time(), ""
             self.guide.channels = len(data)
             await asyncio.to_thread(self.guide.save)

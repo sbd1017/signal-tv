@@ -8,9 +8,11 @@ import os
 import re
 import time
 import xml.etree.ElementTree as ET
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
+from . import livemeta
 from .util import clean, fold, write_json
 
 KEEP_BEFORE = 3 * 3600
@@ -34,22 +36,74 @@ def _ts(value: str) -> float:
         return 0.0
 
 
-def parse_xmltv(path: Path, live: list[dict]) -> dict[str, list]:
+_SUFFIX = re.compile(r"\.([a-z]{2})$")
+_FRENCH = re.compile(r"\b(FRANCE|FRENCH)\b")
+
+
+def guide_ids(live: list[dict], cats: dict | None = None) -> dict[str, str]:
+    """Live item -> the guide id to read it from: the provider's own, except where versions of one channel
+    disagree about the country and one of them has the country the name gives ("8K: beIN SPORTS 2 FRANCE"
+    RAW linked to Qatar's guide, HD to the French one)."""
+    out: dict[str, str] = {}
+    groups: dict[tuple, list[tuple[str, str]]] = {}
+    for it in live:
+        gid = it.get("epg") or ""
+        if not gid:
+            continue
+        out[it["id"]] = gid
+        m = _SUFFIX.search(gid.lower())
+        if not m:
+            continue
+        category = (cats or {}).get(it.get("cat", ""), "")
+        inf = livemeta.name_info(it.get("name") or "", category)
+        region = livemeta.name_info("", category)["region"] if inf["region"] == "*" else inf["region"]
+        want = "fr" if _FRENCH.search(livemeta.fold(it.get("name") or "")) else region.lower()
+        if inf["base"]:
+            groups.setdefault((inf["prefix"], inf["base"], want), []).append((it["id"], gid))
+    for (_, _, want), members in groups.items():
+        right = Counter(g for _, g in members if g.lower().endswith("." + want))
+        if right:
+            best = right.most_common(1)[0][0]
+            for iid, gid in members:
+                if not gid.lower().endswith("." + want):
+                    out[iid] = best
+    return out
+
+
+def one_timeline(runs: list[list]) -> list:
+    """One guide out of the sources stacked in the same XMLTV id (each starts over: the start goes backwards).
+    They often contradict each other, some by whole hours, so they are never interleaved: the longest is
+    kept, and the rest only add what lies entirely before or after it."""
+    out: list = []
+    for run in sorted(runs, key=len, reverse=True):                        # equal lengths: the file's own order
+        first, end = (out[0][0], max(r[1] for r in out)) if out else (0, 0)
+        out = sorted(out + [r for r in run if r[0] >= end or r[1] <= first], key=lambda r: r[0])
+    return [r for i, r in enumerate(out) if not i or r[0] != out[i - 1][0]]
+
+
+def parse_xmltv(path: Path, live: list[dict], cats: dict | None = None) -> dict[str, list]:
     """Returns {live_item_id: [[start, stop, title, desc(, categories)], ...]} sorted by start.
     categories (XMLTV <category>, e.g. the competition) only when the guide has any; the Live
-    search (epgsearch.py) searches them with the description."""
+    search (epgsearch.py) searches them with the description.
+
+    Every channel is read from one source only. Ids that differ only in capitals are different guides
+    ("beINSports2.qa" is "beinsports2.qa" three hours out): the spelling most channels carry is used, then
+    the channel's own, then the longest."""
     by_epg: dict[str, list[str]] = {}
     by_name: dict[str, list[str]] = {}
+    spelt = Counter(it["epg"] for it in live if it.get("epg"))
+    gid_of = guide_ids(live, cats)
     for it in live:
-        if it.get("epg"):
-            by_epg.setdefault(it["epg"].lower(), []).append(it["id"])
+        if it["id"] in gid_of:
+            by_epg.setdefault(gid_of[it["id"]].lower(), []).append(it["id"])
         for n in {it.get("epg_name") or "", it.get("name") or ""}:
             if n:
                 by_name.setdefault(_norm(n), []).append(it["id"])
-    chan_map: dict[str, list[str]] = {}
+    named: dict[str, list[str]] = {}                # XMLTV id -> channels it is only tied to by name
     now = time.time()
     lo, hi = now - KEEP_BEFORE, now + KEEP_AFTER
-    out: dict[str, list] = {}
+    runs: dict[str, list[list]] = {}
+    last: dict[str, float] = {}
     with path.open("rb") as raw:
         magic = raw.read(2)
     opener = gzip.open if magic == b"\x1f\x8b" else open
@@ -58,20 +112,23 @@ def parse_xmltv(path: Path, live: list[dict]) -> dict[str, list]:
             tag = el.tag
             if tag == "channel":
                 cid = (el.get("id") or "").strip()
-                ids = list(by_epg.get(cid.lower(), []))
-                if not ids:
+                if cid.lower() not in by_epg:
                     for dn in el.findall("display-name"):
                         ids = by_name.get(_norm(dn.text or ""), [])
                         if ids:
+                            named[cid] = ids
                             break
-                if ids:
-                    chan_map[cid] = ids
                 el.clear()
             elif tag == "programme":
                 cid = (el.get("channel") or "").strip()
-                ids = chan_map.get(cid) or by_epg.get(cid.lower())
-                if ids:
+                if cid in named or cid.lower() in by_epg:
                     start, stop = _ts(el.get("start", "")), _ts(el.get("stop", ""))
+                    if start:
+                        # counted before the window is cut, so a source is told from the next even when
+                        # only its last day is inside
+                        if cid not in runs or start < last[cid]:
+                            runs.setdefault(cid, []).append([])
+                        last[cid] = start
                     if start and stop > lo and start < hi:
                         title = clean(el.findtext("title"), 160) or "Untitled"
                         desc = clean(el.findtext("desc"), 600)
@@ -79,24 +136,27 @@ def parse_xmltv(path: Path, live: list[dict]) -> dict[str, list]:
                         if sub and sub.lower() != title.lower():
                             desc = f"{sub}. {desc}" if desc else sub
                         row = [int(start), int(stop or start + 1800), title, desc]
-                        cats = [c for c in dict.fromkeys(clean(e.text, 60) for e in el.findall("category")) if c]
-                        if cats:
-                            row.append(", ".join(cats)[:200])
-                        for iid in ids:
-                            out.setdefault(iid, []).append(row)
+                        row_cats = [c for c in dict.fromkeys(clean(e.text, 60) for e in el.findall("category")) if c]
+                        if row_cats:
+                            row.append(", ".join(row_cats)[:200])
+                        runs[cid][-1].append(row)
                 el.clear()
             elif tag == "tv":
                 el.clear()
-    for rows in out.values():
-        rows.sort(key=lambda r: r[0])
-        # de-duplicate overlapping duplicates from multiple sources
-        dedup, last = [], None
-        for r in rows:
-            if last and r[0] == last[0]:
-                continue
-            dedup.append(r)
-            last = r
-        rows[:] = dedup
+    guides = {cid: rows for cid, r in runs.items() if (rows := one_timeline(r))}
+    spellings: dict[str, list[str]] = {}
+    for cid in guides:
+        spellings.setdefault(cid.lower(), []).append(cid)
+    out: dict[str, list] = {}
+    for low, ids in by_epg.items():
+        cids = spellings.get(low)
+        for iid in ids if cids else ():
+            out[iid] = guides[max(cids, key=lambda c: (spelt[c], c == gid_of[iid], len(guides[c])))]
+    linked = set(out)
+    for cid, ids in named.items():
+        for iid in ids if cid in guides else ():
+            if iid not in linked and len(guides[cid]) > len(out.get(iid, ())):
+                out[iid] = guides[cid]
     return out
 
 
