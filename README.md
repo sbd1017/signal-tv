@@ -44,7 +44,9 @@ classics). Image credits: [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS
 - **Live TV** with now and next, progress bars and a full guide for each channel. Channel up and down,
   previous channel, and a mini player that keeps the channel going while you browse. **Also showing**
   lists the other channels with the same match or programme. A "live" channel that turns out to be a
-  short recording on repeat is stopped with a plain message and left out for a few hours.
+  short recording on repeat is stopped with a plain message and left out for a few hours. Messy provider
+  guides are untangled: each channel reads one source, and a version linked to another country's guide is
+  put right when its other versions show which guide it should have.
 - **Sports**: the day's matches from the guide as one card each, whatever each broadcaster calls them and in
   whatever language ("Noruega", "Ουγγαρία" and "Portugalska" are Norway, Hungary and Portugal), with team crests, competition logos and the competition under the teams. Live scores and the match
   clock come from ESPN's public scoreboards (each device can hide them), and Live now leads with the
