@@ -2,6 +2,11 @@
 
 What changed in each release of Signal TV, newest first.
 
+## v1.18.0 - 2026-11-25
+
+- Guide: each channel reads one source. Sources stacked under one XMLTV id were interleaved (a quarter of channels showed contradicting programmes), ids differing only in capitals were merged (one is three hours out), and a version linked to another country's guide was believed ('8K: beIN SPORTS 2 FRANCE' RAW had Qatar's: Sporting v Manchester United over the EuroLeague)
+- Public README: one guide source per channel
+
 ## v1.17.0 - 2026-11-14
 
 - Live on a wide screen: the wheel scrolls the channel list only with the pointer over it, not over the pinned player beside it (anything in the player's column that scrolls on its own still does)
